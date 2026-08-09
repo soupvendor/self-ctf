@@ -1,0 +1,67 @@
+[tools]
+python = "3.12"
+uv = "0.12.3"
+"pipx:ctfcli" = "0.1.8"
+
+[env]
+_.file = ".env"
+
+[tasks.render]
+description = "Render *.tmpl into real files using flags from .env"
+run = "python3 scripts/render.py"
+
+[tasks."flags:generate"]
+description = "Generate a random flag for every FLAG_* placeholder in .env"
+run = "python3 scripts/genflags.py"
+
+[tasks.up]
+description = "Start CTFd"
+run = "docker compose up -d"
+
+[tasks.down]
+description = "Stop CTFd and delete all state"
+run = "docker compose down -v"
+
+[tasks.logs]
+description = "Tail CTFd logs"
+run = "docker compose logs -f"
+
+[tasks.bootstrap]
+description = "Run CTFd's first-time setup and mint an API token for ctfcli"
+run = "bash scripts/bootstrap.sh"
+
+[tasks.build]
+description = "Build every challenge's player-facing artifact"
+depends = ["render"]
+run = "bash scripts/build.sh"
+
+[tasks.lint]
+description = "Lint every challenge.yml"
+depends = ["render"]
+run = "ctf challenge lint"
+
+[tasks."check:leaks"]
+description = "Fail if a real flag reaches a build context, dist/, or a shipped image"
+run = "python3 scripts/check_leaks.py"
+
+[tasks.sync]
+description = "Push challenge metadata to CTFd"
+depends = ["render"]
+run = "ctf challenge sync"
+
+[tasks.healthcheck]
+description = "Solve every challenge programmatically against the running instance"
+run = "ctf challenge healthcheck"
+
+[tasks.ci]
+description = "Full pipeline: build, stand up CTFd, sync, solve, tear down"
+run = [
+  "mise run render",
+  "mise run lint",
+  "mise run build",
+  "mise run check:leaks",
+  "mise run up",
+  "mise run bootstrap",
+  "mise run sync",
+  "mise run healthcheck",
+]

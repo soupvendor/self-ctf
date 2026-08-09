@@ -38,16 +38,22 @@ one you are editing before you change anything.
 
 ## Flags and secrets
 
-This repo is organizer-only — it holds the answer keys. The line that matters is what
-reaches a **player**, not what reaches git.
+**This repo is public.** Anyone can read it, so no real flag may ever be committed —
+a public clone must not spoil a live event.
 
-- ctfcli's blessed path puts the flag in `challenge.yml` in plaintext and CTFd validates
-  it server-side. That is expected here. Do not invent a templating step to hide it.
+- Challenges commit `challenge.yml.tmpl` holding `${FLAG_<NAME>}`, never a literal flag.
+  `mise run render` writes the real value into a gitignored `challenge.yml` from `.env`.
+  Same for any challenge file that embeds a flag.
+- ctfcli has no templating of its own, so the render step is ours. It still hands ctfcli a
+  complete, valid `challenge.yml` through the normal interface — nothing is patched or
+  bypassed. Consequence: `ctf challenge mirror` writes back to a generated file, so we
+  don't use it.
 - Nothing carrying a flag or credential may enter a build context, `dist/`, a shipped image
   layer, or any service players can reach — unless leaking it *is* the challenge.
-- Deployment secrets are a separate matter: CTFd admin token, registry and cloud keys live
-  in `.env` (gitignored), with `.env.example` carrying placeholders. `ctf init` writes an
-  admin access token into `.ctf/config` — that file must never be committed.
+- Every deployment generates its own flags. Two operators running this repo get different
+  answers, which is what makes a public CTF repo playable.
+- Deployment secrets live in `.env` (gitignored), with `.env.example` carrying placeholders.
+  Bootstrap writes a CTFd admin access token into `.ctf/config` — never commit that file.
 - Placeholder flags in committed fixtures use `flag{EXAMPLE_...}`, so a real flag never
   looks like test data.
 - Answer keys — solvers, seed scripts holding plaintext flags, writeups — live in
