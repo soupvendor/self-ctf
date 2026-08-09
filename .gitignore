@@ -226,9 +226,6 @@ __marimo__/
 # CTFd admin access token, written by scripts/bootstrap.sh
 .ctf/config
 
-# CTFd runtime state (database, uploads, logs)
-.data/
-
 # Rendered from *.tmpl by `mise run render` — contains real flags
 challenges/*/challenge.yml
 challenges/*/build/deploy-creds.env
