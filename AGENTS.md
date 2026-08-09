@@ -12,7 +12,7 @@ one you are editing before you change anything.
 |---|---|
 | `challenges/**` | Vulnerabilities are the product. Never harden, patch, or "improve" them. |
 | `platform/**`, `compose.yaml`, CI | Real production code. Harden normally. |
-| `challenges/*/solution/` | Answer key. Never ships to players. |
+| `challenges/*/writeup/` | Answer key. Never ships to players. |
 
 ## Writing code
 
@@ -38,25 +38,51 @@ one you are editing before you change anything.
 
 ## Flags and secrets
 
-- No flag literal, credential, or key in git.
-- The platform stores flags **hashed**, never plaintext.
-- Real values come from `.env` (gitignored). `.env.example` carries placeholders.
+This repo is organizer-only — it holds the answer keys. The line that matters is what
+reaches a **player**, not what reaches git.
+
+- ctfcli's blessed path puts the flag in `challenge.yml` in plaintext and CTFd validates
+  it server-side. That is expected here. Do not invent a templating step to hide it.
+- Nothing carrying a flag or credential may enter a build context, `dist/`, a shipped image
+  layer, or any service players can reach — unless leaking it *is* the challenge.
+- Deployment secrets are a separate matter: CTFd admin token, registry and cloud keys live
+  in `.env` (gitignored), with `.env.example` carrying placeholders. `ctf init` writes an
+  admin access token into `.ctf/config` — that file must never be committed.
 - Placeholder flags in committed fixtures use `flag{EXAMPLE_...}`, so a real flag never
   looks like test data.
 - Answer keys — solvers, seed scripts holding plaintext flags, writeups — live in
-  `challenges/*/solution/` and are excluded from every Docker build context via
+  `challenges/*/writeup/` and are excluded from every Docker build context via
   `.dockerignore`. The exclusion must be mechanical; convention is not enough.
+- `challenge.yml`'s `solution:` field uploads the document **into CTFd**. Pin it explicitly
+  with the object form and `state: hidden`. `state: solved` reveals the writeup to whoever
+  solved that stage — in a chain, that hands them the next stage's credentials.
 
 ## Challenge authoring
 
 - A challenge is not done until an automated solver runs end-to-end against a fresh
   instance and returns the flag. Unsolvable by script means unverifiable.
+- The solver is `writeup/exploit.sh`, wired in as `healthcheck:` in `challenge.yml`.
+  ctfcli passes it `--connection-info`, so it runs against a live instance. Use
+  `ctf challenge healthcheck` — do not build a parallel harness.
 - Pin base images: tag at minimum, digest for anything a player dissects. An upstream
   rebuild silently breaks the puzzle.
 - Clean `up` from nothing, clean `down -v` back to nothing. No manual steps.
 - Assume the player gets RCE inside the container. Non-root, resource limits, no host
   mounts, no Docker socket (unless escape *is* the challenge, and then it is isolated),
   no secrets shared with another challenge.
+- One shared instance per service. CTFd open-source has no per-team instancing, and the
+  plugins that add it generally want the Docker socket mounted — which breaks the rule
+  above. Don't reach for one without making that trade deliberately.
+
+## Multi-stage chains
+
+- One stage, one challenge, chained with `requirements.prerequisites`. `anonymize: true`
+  shows a locked placeholder; `false` hides the stage outright.
+- Handoff context — recovered credentials, which service to attack next — belongs in the
+  next stage's description, which players can't read until they unlock it.
+- Set `next:` so a solve points at the follow-up and the narrative pulls forward.
+- Do not try to sequence several flags inside one challenge. `logic: all` is unordered and
+  will not enforce a chain.
 
 ## Running things
 
@@ -76,12 +102,20 @@ Do not report a task complete on inspection alone. "Should work" is not done.
 
 ## Commands
 
-<!-- TODO: fill in ctfcli, test, and lint entries once the stack lands. -->
-
 | Task | Command |
 |---|---|
 | Stand up the platform | `docker compose up -d` |
 | Tear down (destructive) | `docker compose down -v` |
+| Scaffold a challenge | `ctf challenge new` |
+| Create it in CTFd (first time) | `ctf challenge install <name>` |
+| Push later edits to CTFd | `ctf challenge sync <name>` |
+| Check local matches remote | `ctf challenge verify` |
+| Run every solver | `ctf challenge healthcheck` |
+| Lint / format `challenge.yml` | `ctf challenge lint`, `ctf challenge format` |
+
+Omitting `<name>` applies the command to every challenge.
+
+<!-- TODO: platform-side test and lint commands, once platform/ exists. -->
 
 Host tooling is managed with `mise`: `mise install`.
 
@@ -93,7 +127,11 @@ Target structure — parts of this do not exist yet.
 challenges/<name>/
   challenge.yml       # ctfcli metadata
   Dockerfile          # or compose fragment
-  solution/           # solver + writeup, never shipped
+  dist/               # player-facing files, listed under files:
+  writeup/            # exploit.sh (healthcheck) + WRITEUP.md, never shipped
 platform/             # CTFd config, theme, plugins
 compose.yaml
 ```
+
+`dist/` and `writeup/` are ctfcli's own conventions — the spec wires
+`healthcheck: writeup/exploit.sh` and `files: dist/...`. Follow them.
