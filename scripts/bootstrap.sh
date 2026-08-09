@@ -73,18 +73,4 @@ token="$(curl -fsS -b "$JAR" -X POST "$CTFD_URL/api/v1/tokens" \
 [ -n "$token" ] || { echo "!! Token request returned nothing"; exit 1; }
 
 echo "==> Writing .ctf/config"
-mkdir -p .ctf
-{
-  echo "[config]"
-  echo "url = $CTFD_URL"
-  echo "access_token = $token"
-  echo
-  echo "[challenges]"
-  for dir in challenges/*/; do
-    [ -f "${dir}challenge.yml" ] || continue
-    path="${dir%/}"
-    echo "$path = $path"
-  done
-} > .ctf/config
-
-echo "    Done. $(grep -c '^challenges/' .ctf/config || true) challenge(s) registered."
+python3 scripts/ctfconfig.py --url "$CTFD_URL" --token "$token"

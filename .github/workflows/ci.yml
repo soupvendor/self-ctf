@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# CI generates its own .env, so it needs no repository secrets. Its flags are
+# throwaway and unrelated to any real deployment.
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          install: true
+          cache: true
+
+      - run: mise run env:init
+
+      - run: mise run ci
+
+      - name: Tear down
+        if: always()
+        run: mise run down

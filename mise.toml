@@ -6,6 +6,13 @@ uv = "0.12.3"
 [env]
 _.file = ".env"
 
+[tasks."env:init"]
+description = "Create .env and fill in every secret and flag it is missing"
+run = [
+  "python3 scripts/mkenv.py",
+  "python3 scripts/genflags.py",
+]
+
 [tasks.render]
 description = "Render *.tmpl into real files using flags from .env"
 run = "python3 scripts/render.py"
@@ -35,10 +42,20 @@ description = "Build every challenge's player-facing artifact"
 depends = ["render"]
 run = "bash scripts/build.sh"
 
+[tasks.register]
+description = "Write .ctf/config so ctfcli recognises this as a project"
+run = "python3 scripts/ctfconfig.py --url $CTFD_URL"
+
 [tasks.lint]
 description = "Lint every challenge.yml"
-depends = ["render"]
-run = "ctf challenge lint"
+depends = ["render", "register"]
+run = """
+set -e
+for dir in challenges/*/; do
+  [ -f "$dir/challenge.yml" ] || continue
+  ctf challenge lint "${dir%/}"
+done
+"""
 
 [tasks."check:leaks"]
 description = "Fail if a real flag reaches a build context, dist/, or a shipped image"
@@ -61,12 +78,12 @@ done
 """
 
 [tasks.ci]
-description = "Full pipeline: build, stand up CTFd, sync, solve, tear down"
+description = "Full pipeline: build, stand up CTFd, sync, solve every challenge"
 run = [
   "mise run render",
-  "mise run lint",
-  "mise run build",
   "mise run check:leaks",
+  "mise run build",
+  "mise run lint",
   "mise run up",
   "mise run bootstrap",
   "mise run sync",

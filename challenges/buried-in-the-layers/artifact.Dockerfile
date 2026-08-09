@@ -1,3 +1,6 @@
+# Named artifact.Dockerfile, not Dockerfile: ctfcli treats a Dockerfile as a
+# deployable service image, and this builds a file players download instead.
+#
 # PLANTED VULNERABILITY - do not "fix" this.
 #
 # The flaw: COPY writes the credentials into layer A. The later RUN rm only
