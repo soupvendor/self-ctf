@@ -1,0 +1,5 @@
+# The answer key must never enter the build context.
+writeup/
+challenge.yml
+challenge.yml.tmpl
+dist/

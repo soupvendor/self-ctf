@@ -45,13 +45,20 @@ description = "Fail if a real flag reaches a build context, dist/, or a shipped 
 run = "python3 scripts/check_leaks.py"
 
 [tasks.sync]
-description = "Push challenge metadata to CTFd"
+description = "Push challenge metadata to CTFd, installing anything new"
 depends = ["render"]
-run = "ctf challenge sync"
+run = "python3 scripts/sync.py"
 
 [tasks.healthcheck]
-description = "Solve every challenge programmatically against the running instance"
-run = "ctf challenge healthcheck"
+description = "Solve every challenge programmatically"
+depends = ["render"]
+run = """
+set -e
+for dir in challenges/*/; do
+  [ -f "$dir/challenge.yml" ] || continue
+  ctf challenge healthcheck "${dir%/}"
+done
+"""
 
 [tasks.ci]
 description = "Full pipeline: build, stand up CTFd, sync, solve, tear down"
