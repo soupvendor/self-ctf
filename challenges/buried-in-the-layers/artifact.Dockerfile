@@ -15,7 +15,7 @@ LABEL org.internal.team="platform" \
       org.internal.note="deployer image - do not distribute build context"
 
 # Layer A: the secret enters the image here.
-COPY build/deploy-creds.env /opt/deploy/creds.env
+COPY seed/deploy-creds.env /opt/deploy/creds.env
 
 # Layer B: pretend to do real work with the creds.
 RUN echo "authenticating to CI as $(grep CI_USER /opt/deploy/creds.env | cut -d= -f2)" \

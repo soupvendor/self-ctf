@@ -44,6 +44,14 @@ def main() -> int:
             if value in text:
                 problems.append(f"{rel} contains the real value of {var}")
 
+    # 0. A template that git does not track renders fine for whoever wrote it
+    #    and is simply absent for everyone else, including CI.
+    tracked = set(tracked_files())
+    for tmpl in sorted(ROOT.glob("challenges/*/**/*.tmpl")):
+        rel = str(tmpl.relative_to(ROOT))
+        if rel not in tracked:
+            problems.append(f"{rel} is not tracked by git - check .gitignore")
+
     for challenge in sorted(ROOT.glob("challenges/*/")):
         name = challenge.relative_to(ROOT)
 
