@@ -1,0 +1,5 @@
+The flag is deliberately recoverable from dist/internal-deployer.tar - that is
+the entire challenge. ctfcli's "potential flag found in distributed file" check
+is correct in general and wrong here, so `mise run lint` disables that one scan
+for this challenge. Every other lint check still applies, and scripts/check_leaks.py
+still enforces that the answer key stays out of the build context.

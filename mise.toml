@@ -53,7 +53,14 @@ run = """
 set -e
 for dir in challenges/*/; do
   [ -f "$dir/challenge.yml" ] || continue
-  ctf challenge lint "${dir%/}"
+  if [ -f "$dir/.expect-flag-in-artifact" ]; then
+    # Recovering the flag from the artifact IS this challenge, so ctfcli's
+    # distributed-file scan is wrong here. Point it at a string that cannot
+    # occur so every other lint check still runs.
+    ctf challenge lint "${dir%/}" --flag_format "__no_such_flag_format__"
+  else
+    ctf challenge lint "${dir%/}"
+  fi
 done
 """
 

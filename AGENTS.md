@@ -72,6 +72,9 @@ a public clone must not spoil a live event.
   `ctf challenge healthcheck` — do not build a parallel harness.
 - Pin base images: tag at minimum, digest for anything a player dissects. An upstream
   rebuild silently breaks the puzzle.
+- If the flag is *meant* to be recoverable from a distributed file, drop an
+  `.expect-flag-in-artifact` file in the challenge saying why. `mise run lint` then
+  skips ctfcli's distributed-file scan for that challenge only, and keeps the rest.
 - Clean `up` from nothing, clean `down -v` back to nothing. No manual steps.
 - Assume the player gets RCE inside the container. Non-root, resource limits, no host
   mounts, no Docker socket (unless escape *is* the challenge, and then it is isolated),
