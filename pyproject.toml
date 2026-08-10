@@ -1,0 +1,17 @@
+# Tool configuration only. This repo is not a Python package.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PL", "EXE", "S"]
+ignore = [
+  "S603", # subprocess call - argv is fixed, never user input
+  "S607", # partial executable path - git and ctf come from mise's PATH by design
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["scripts"]

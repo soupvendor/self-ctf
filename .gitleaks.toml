@@ -1,0 +1,22 @@
+title = "self-ctf"
+
+[extend]
+useDefault = true
+
+# Challenge seed files hold planted credentials on purpose - a leaked AWS key is
+# the puzzle, not a mistake. Scanning them means gitleaks fights the content of
+# every challenge, so exempt exactly those paths and nothing else.
+#
+# This does NOT weaken the real protection: seed files carry ${FLAG_*}
+# placeholders rather than live flags, and scripts/check_leaks.py separately
+# fails if any real flag value reaches a tracked file.
+[allowlist]
+description = "Planted challenge credentials and local-only secret files"
+paths = [
+  '''challenges/[^/]+/seed/.*''',
+  # gitleaks walks the working tree regardless of the file list it is given, so
+  # it finds these gitignored local files on every run. They cannot be committed,
+  # and check_leaks.py fails outright if either ever becomes tracked.
+  '''^\.env$''',
+  '''^\.ctf/config$''',
+]

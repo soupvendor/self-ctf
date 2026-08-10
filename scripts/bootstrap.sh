@@ -17,7 +17,10 @@ trap 'rm -f "$JAR"' EXIT
 echo "==> Waiting for CTFd at $CTFD_URL"
 for i in $(seq 1 60); do
   if curl -fsS -o /dev/null "$CTFD_URL/setup" 2>/dev/null; then break; fi
-  [ "$i" = "60" ] && { echo "!! CTFd never answered"; exit 1; }
+  [ "$i" = "60" ] && {
+    echo "!! CTFd never answered"
+    exit 1
+  }
   sleep 2
 done
 
@@ -29,7 +32,10 @@ if [ "$setup_code" = "200" ]; then
   nonce="$(curl -s -c "$JAR" "$CTFD_URL/setup" \
     | grep -oE 'name="nonce"[^>]*value="[^"]+"' \
     | grep -oE 'value="[^"]+"' | cut -d'"' -f2 | head -1)"
-  [ -n "$nonce" ] || { echo "!! Could not read setup nonce"; exit 1; }
+  [ -n "$nonce" ] || {
+    echo "!! Could not read setup nonce"
+    exit 1
+  }
 
   curl -fsS -b "$JAR" -c "$JAR" -o /dev/null "$CTFD_URL/setup" \
     -F "nonce=$nonce" \
@@ -63,14 +69,20 @@ echo "==> Minting an API token"
 csrf="$(curl -s -b "$JAR" -c "$JAR" "$CTFD_URL/settings" \
   | grep -oE "'csrfNonce':[[:space:]]*\"[^\"]+\"" \
   | grep -oE '"[^"]+"$' | tr -d '"')"
-[ -n "$csrf" ] || { echo "!! Could not read csrfNonce - is the admin session valid?"; exit 1; }
+[ -n "$csrf" ] || {
+  echo "!! Could not read csrfNonce - is the admin session valid?"
+  exit 1
+}
 
 token="$(curl -fsS -b "$JAR" -X POST "$CTFD_URL/api/v1/tokens" \
   -H "Content-Type: application/json" \
   -H "CSRF-Token: $csrf" \
   -d '{"description":"ctfcli (self-ctf bootstrap)"}' \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["value"])')"
-[ -n "$token" ] || { echo "!! Token request returned nothing"; exit 1; }
+[ -n "$token" ] || {
+  echo "!! Token request returned nothing"
+  exit 1
+}
 
 echo "==> Writing .ctf/config"
 python3 scripts/ctfconfig.py --url "$CTFD_URL" --token "$token"
