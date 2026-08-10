@@ -1,0 +1,98 @@
+[tools]
+python = "3.12"
+uv = "0.12.3"
+"pipx:ctfcli" = "0.1.8"
+
+[env]
+_.file = ".env"
+
+[tasks."env:init"]
+description = "Create .env and fill in every secret and flag it is missing"
+run = [
+  "python3 scripts/mkenv.py",
+  "python3 scripts/genflags.py",
+]
+
+[tasks.render]
+description = "Render *.tmpl into real files using flags from .env"
+run = "python3 scripts/render.py"
+
+[tasks."flags:generate"]
+description = "Generate a random flag for every FLAG_* placeholder in .env"
+run = "python3 scripts/genflags.py"
+
+[tasks.up]
+description = "Start CTFd"
+run = "docker compose up -d"
+
+[tasks.down]
+description = "Stop CTFd and delete all state"
+run = "docker compose down -v"
+
+[tasks.logs]
+description = "Tail CTFd logs"
+run = "docker compose logs -f"
+
+[tasks.bootstrap]
+description = "Run CTFd's first-time setup and mint an API token for ctfcli"
+run = "bash scripts/bootstrap.sh"
+
+[tasks.build]
+description = "Build every challenge's player-facing artifact"
+depends = ["render"]
+run = "bash scripts/build.sh"
+
+[tasks.register]
+description = "Write .ctf/config so ctfcli recognises this as a project"
+run = "python3 scripts/ctfconfig.py --url $CTFD_URL"
+
+[tasks.lint]
+description = "Lint every challenge.yml"
+depends = ["render", "register"]
+run = """
+set -e
+for dir in challenges/*/; do
+  [ -f "$dir/challenge.yml" ] || continue
+  if [ -f "$dir/.expect-flag-in-artifact" ]; then
+    # Recovering the flag from the artifact IS this challenge, so ctfcli's
+    # distributed-file scan is wrong here. Point it at a string that cannot
+    # occur so every other lint check still runs.
+    ctf challenge lint "${dir%/}" --flag_format "__no_such_flag_format__"
+  else
+    ctf challenge lint "${dir%/}"
+  fi
+done
+"""
+
+[tasks."check:leaks"]
+description = "Fail if a real flag reaches a build context, dist/, or a shipped image"
+run = "python3 scripts/check_leaks.py"
+
+[tasks.sync]
+description = "Push challenge metadata to CTFd, installing anything new"
+depends = ["render"]
+run = "python3 scripts/sync.py"
+
+[tasks.healthcheck]
+description = "Solve every challenge programmatically"
+depends = ["render"]
+run = """
+set -e
+for dir in challenges/*/; do
+  [ -f "$dir/challenge.yml" ] || continue
+  ctf challenge healthcheck "${dir%/}"
+done
+"""
+
+[tasks.ci]
+description = "Full pipeline: build, stand up CTFd, sync, solve every challenge"
+run = [
+  "mise run render",
+  "mise run check:leaks",
+  "mise run build",
+  "mise run lint",
+  "mise run up",
+  "mise run bootstrap",
+  "mise run sync",
+  "mise run healthcheck",
+]

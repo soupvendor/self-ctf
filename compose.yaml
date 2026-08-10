@@ -1,0 +1,78 @@
+# CTFd platform stack. Adapted from CTFd's own docker-compose.yml, with the
+# published image instead of a source build and no nginx front end - it exists
+# upstream to terminate TLS, which a single local host does not need.
+#
+# This is platform code: harden it normally. Challenge services are separate.
+
+services:
+  ctfd:
+    image: ctfd/ctfd:3.8.6
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - UPLOAD_FOLDER=/var/uploads
+      - DATABASE_URL=mysql+pymysql://ctfd:${CTFD_DB_PASSWORD:?set CTFD_DB_PASSWORD in .env}@db/ctfd
+      - REDIS_URL=redis://cache:6379
+      - SECRET_KEY=${CTFD_SECRET_KEY:?set CTFD_SECRET_KEY in .env}
+      - WORKERS=1
+      - LOG_FOLDER=/var/log/CTFd
+      - ACCESS_LOG=-
+      - ERROR_LOG=-
+    volumes:
+      - ctfd-logs:/var/log/CTFd
+      - ctfd-uploads:/var/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    networks:
+      - default
+      - internal
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      - MARIADB_RANDOM_ROOT_PASSWORD=1
+      - MARIADB_USER=ctfd
+      - MARIADB_PASSWORD=${CTFD_DB_PASSWORD:?set CTFD_DB_PASSWORD in .env}
+      - MARIADB_DATABASE=ctfd
+      - MARIADB_AUTO_UPGRADE=1
+    volumes:
+      - ctfd-db:/var/lib/mysql
+    networks:
+      - internal
+    command:
+      [
+        mysqld,
+        --character-set-server=utf8mb4,
+        --collation-server=utf8mb4_unicode_ci,
+        --wait_timeout=28800,
+        --log-warnings=0,
+      ]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  cache:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    volumes:
+      - ctfd-cache:/data
+    networks:
+      - internal
+
+volumes:
+  ctfd-logs:
+  ctfd-uploads:
+  ctfd-db:
+  ctfd-cache:
+
+networks:
+  default:
+  internal:
+    internal: true

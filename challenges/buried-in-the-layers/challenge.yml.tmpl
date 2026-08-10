@@ -1,0 +1,50 @@
+name: Buried in the Layers
+author: self-ctf
+category: Containers
+description: |
+  A teammate built the `internal-deployer` image, noticed they had baked a
+  deploy token into it, and removed the file in a follow-up build step. They
+  are confident the token is gone.
+
+  The image is attached. Convince them otherwise.
+attribution: self-ctf
+value: 100
+type: standard
+
+image: null
+protocol: null
+host: null
+
+# No service to connect to - this is an artifact challenge. ctfcli refuses to
+# run a healthcheck without this field, and the spec allows instructions here.
+connection_info: Download the attached internal-deployer.tar and dissect it locally.
+healthcheck: writeup/exploit.sh
+solution:
+  path: writeup/WRITEUP.md
+  state: hidden
+
+attempts: 10
+logic: any
+
+flags:
+  - ${FLAG_BURIED_IN_THE_LAYERS}
+
+topics:
+  - container internals
+  - information disclosure
+
+tags:
+  - containers
+
+files:
+  - dist/internal-deployer.tar
+
+hints:
+  - content: Deleting a file in a later layer does not remove it from an earlier one.
+    cost: 0
+
+requirements: []
+next: null
+
+state: hidden
+version: "0.1"
