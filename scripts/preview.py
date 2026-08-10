@@ -11,12 +11,21 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def api(url: str, token: str, path: str, method: str = "GET", body: dict | None = None):
-    req = urllib.request.Request(
+def api(
+    url: str,
+    token: str,
+    path: str,
+    method: str = "GET",
+    body: dict[str, str] | None = None,
+) -> Any:
+    if not url.startswith(("http://", "https://")):
+        raise SystemExit(f"!! CTFD_URL must be http(s), got: {url}")
+    req = urllib.request.Request(  # noqa: S310 - scheme checked above
         f"{url.rstrip('/')}{path}",
         method=method,
         data=json.dumps(body).encode() if body else None,
@@ -26,7 +35,7 @@ def api(url: str, token: str, path: str, method: str = "GET", body: dict | None 
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - scheme checked above
         return json.load(resp)["data"]
 
 

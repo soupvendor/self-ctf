@@ -18,7 +18,7 @@ LABEL org.internal.team="platform" \
 COPY seed/deploy-creds.env /opt/deploy/creds.env
 
 # Layer B: pretend to do real work with the creds.
-RUN echo "authenticating to CI as $(grep CI_USER /opt/deploy/creds.env | cut -d= -f2)" \
+RUN echo "authenticating to CI as $(awk -F= '/^CI_USER/{print $2}' /opt/deploy/creds.env)" \
     && mkdir -p /opt/deploy/out \
     && echo "deploy artifact built" > /opt/deploy/out/artifact.txt
 

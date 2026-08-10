@@ -1,0 +1,50 @@
+amends "package://github.com/jdx/hk/releases/download/v1.54.1/hk@1.54.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.54.1/hk@1.54.1#/Builtins.pkl"
+
+// Static checks only. Anything needing docker or a running CTFd belongs in
+// `mise run ci`, not in a hook someone waits on before every commit.
+local linters = new Mapping<String, Step> {
+  ["ruff"] = Builtins.ruff
+  ["ruff-format"] = Builtins.ruff_format
+  ["mypy"] = Builtins.mypy
+  ["shellcheck"] = Builtins.shellcheck
+  ["shfmt"] = Builtins.shfmt
+  ["actionlint"] = Builtins.actionlint
+  ["gitleaks"] = Builtins.gitleaks
+
+  // ctfcli's lint only recognises a file literally named `Dockerfile`, so our
+  // artifact.Dockerfile gets no hadolint coverage from `mise run lint`.
+  ["hadolint"] = (Builtins.hadolint) {
+    glob = List("**/Dockerfile", "**/*.Dockerfile")
+  }
+
+  // The one check that is specific to this repo, and the reason hooks are worth
+  // having at all: a real flag committed to a public repo is leaked permanently,
+  // and amending the commit does not take it back.
+  ["no-leaked-flags"] {
+    check = "mise run check:leaks"
+    exclusive = true
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+
+  ["pre-push"] {
+    steps = linters
+  }
+
+  // `hk check` runs this - used by CI so hooks and CI cannot drift.
+  ["check"] {
+    steps = linters
+  }
+
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+}

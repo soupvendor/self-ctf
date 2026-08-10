@@ -17,18 +17,24 @@ ROOT = Path(__file__).resolve().parent.parent
 NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
 
 
+def require_http(url: str) -> str:
+    if not url.startswith(("http://", "https://")):
+        raise SystemExit(f"!! CTFD_URL must be http(s), got: {url}")
+    return url.rstrip("/")
+
+
 def remote_names(url: str, token: str) -> set[str]:
     # view=admin so hidden challenges count as existing - otherwise we would
     # install a duplicate every run.
-    req = urllib.request.Request(
-        f"{url.rstrip('/')}/api/v1/challenges?view=admin",
+    req = urllib.request.Request(  # noqa: S310 - require_http rejects non-http schemes
+        f"{require_http(url)}/api/v1/challenges?view=admin",
         headers={
             "Authorization": f"Token {token}",
             # CTFd ignores the token unless the request is JSON.
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - scheme checked above
         return {c["name"] for c in json.load(resp)["data"]}
 
 
@@ -54,7 +60,7 @@ def main() -> int:
         rel = path.relative_to(ROOT)
         verb = "sync" if local_name(path) in existing else "install"
         print(f"==> {verb} {rel}")
-        result = subprocess.run(["ctf", "challenge", verb, str(rel)], cwd=ROOT)
+        result = subprocess.run(["ctf", "challenge", verb, str(rel)], cwd=ROOT, check=False)
         if result.returncode != 0:
             return result.returncode
 

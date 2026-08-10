@@ -35,6 +35,11 @@ one you are editing before you change anything.
 - Match the surrounding code. Look for an existing helper before writing one.
 - Ask before adding a dependency.
 - Change what was asked. Note adjacent problems; don't fix them in passing.
+- `mise run check` runs every static check — ruff, mypy strict, shellcheck, shfmt,
+  hadolint, actionlint, gitleaks, and the flag-leak guard. hk runs the same set as a
+  git hook, so a green commit and a green CI mean the same thing.
+- Fix what a linter finds; do not suppress it. A `# noqa` needs a reason on the same
+  line, and it means the finding does not apply — not that it is inconvenient.
 
 ## Flags and secrets
 
@@ -113,6 +118,9 @@ Do not report a task complete on inspection alone. "Should work" is not done.
 
 | Task | Command |
 |---|---|
+| Static checks (as the hooks run) | `mise run check` |
+| Autofix formatting and lint | `hk fix --all` |
+| Install the git hooks | `mise run hooks:install` |
 | Stand up the platform | `docker compose up -d` |
 | Tear down (destructive) | `docker compose down -v` |
 | Scaffold a challenge | `ctf challenge new` |

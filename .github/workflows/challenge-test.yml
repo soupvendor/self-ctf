@@ -1,5 +1,5 @@
+# Verify every challenge in the repository.
 name: Challenge Verification
-description: Verify every challenge in the repository
 
 on:
   pull_request:
@@ -22,6 +22,10 @@ jobs:
           cache: true
 
       - run: mise run env:init
+
+      # Hooks are per-clone opt-in, so CI runs the same checks or a contributor
+      # without them installed bypasses everything.
+      - run: mise run check
 
       - run: mise run ci
 
