@@ -42,8 +42,11 @@ def main() -> int:
         ENV.write_text(EXAMPLE.read_text())
         print("   created .env from .env.example")
 
-    original = ENV.read_text().splitlines()
-    lines = add_new_settings(original)
+    # Compared as text, not as lists: add_new_settings returns its argument
+    # unchanged when nothing is missing, so a list comparison would be against
+    # the same object the fill loop just mutated, and would never write.
+    before = ENV.read_text()
+    lines = add_new_settings(before.splitlines())
     filled = []
     for i, line in enumerate(lines):
         var, sep, value = line.partition("=")
@@ -51,8 +54,9 @@ def main() -> int:
             lines[i] = f"{var}={GENERATED[var]()}"
             filled.append(var)
 
-    if lines != original:
-        ENV.write_text("\n".join(lines) + "\n")
+    after = "\n".join(lines) + "\n"
+    if after != before:
+        ENV.write_text(after)
     for var in filled:
         print(f"   generated {var}")
     if not filled:
