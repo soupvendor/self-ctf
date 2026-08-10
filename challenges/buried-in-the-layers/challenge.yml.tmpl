@@ -5,8 +5,12 @@ description: |
   A teammate built the `internal-deployer` image, noticed they had baked a
   deploy token into it, and removed the file in a follow-up build step. They
   are confident the token is gone.
+  Convince them otherwise.
 
-  The image is attached. Convince them otherwise.
+  Note: The image is attached as a `docker save` archive. Load it with
+  `docker load -i internal-deployer.tar` to work with it as a normal image, or
+  unpack the tar directly — either route is fine.
+
 attribution: self-ctf
 value: 100
 type: standard
@@ -17,7 +21,7 @@ host: null
 
 # No service to connect to - this is an artifact challenge. ctfcli refuses to
 # run a healthcheck without this field, and the spec allows instructions here.
-connection_info: Download the attached internal-deployer.tar and dissect it locally.
+connection_info: No service — this challenge is the attached file.
 healthcheck: writeup/exploit.sh
 solution:
   path: writeup/WRITEUP.md

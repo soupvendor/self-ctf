@@ -9,7 +9,9 @@ services:
     image: ctfd/ctfd:3.8.6
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Configurable so a second checkout does not silently answer on a port the
+      # first one already owns.
+      - "${CTFD_PORT:-8000}:8000"
     environment:
       - UPLOAD_FOLDER=/var/uploads
       - DATABASE_URL=mysql+pymysql://ctfd:${CTFD_DB_PASSWORD:?set CTFD_DB_PASSWORD in .env}@db/ctfd

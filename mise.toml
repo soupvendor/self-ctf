@@ -73,6 +73,11 @@ description = "Push challenge metadata to CTFd, installing anything new"
 depends = ["render"]
 run = "python3 scripts/sync.py"
 
+[tasks.preview]
+description = "Sync, then reveal every challenge on the local instance to look at it"
+depends = ["sync"]
+run = "python3 scripts/preview.py"
+
 [tasks.healthcheck]
 description = "Solve every challenge programmatically"
 depends = ["render"]
