@@ -84,9 +84,26 @@ a public clone must not spoil a live event.
 - Assume the player gets RCE inside the container. Non-root, resource limits, no host
   mounts, no Docker socket (unless escape *is* the challenge, and then it is isolated),
   no secrets shared with another challenge.
-- One shared instance per service. CTFd open-source has no per-team instancing, and the
-  plugins that add it generally want the Docker socket mounted — which breaks the rule
-  above. Don't reach for one without making that trade deliberately.
+- Challenge services must survive being shared or replaced. Assume several people hit the
+  same instance and that it gets rebuilt mid-event: no manual seeding, no state that only
+  exists because someone clicked something.
+
+## Deployment shape
+
+CTFd runs on its own host. Challenge services run separately, one stack per team, so one
+player cannot break a challenge for everyone else.
+
+- **The platform host is stateful.** CTFd holds accounts, solves, and scores. Back it up;
+  never treat it as disposable mid-event.
+- **Team stacks are disposable.** They must come back from nothing with a single command,
+  because that is the recovery plan when a player breaks one.
+- **Every team stack carries the same flag values.** CTFd stores one flag per challenge, so
+  per-team flags would mean only one team could ever submit a correct answer. Generate
+  `.env` once and reuse it across stacks.
+- **Team stacks get flags only.** Never copy the CTFd admin password, secret key, or
+  database password onto a host where a challenge grants code execution.
+- Do not reach for the CTFd instancing plugins. They generally want the Docker socket
+  mounted, which breaks the containment rule above; running separate stacks does not.
 
 ## Multi-stage chains
 
@@ -143,12 +160,16 @@ Target structure — parts of this do not exist yet.
 ```
 challenges/<name>/
   challenge.yml       # ctfcli metadata
-  Dockerfile          # or compose fragment
+  compose.yaml        # challenge services, if any — runs on team hosts
+  artifact.Dockerfile # if the challenge ships a file rather than a service
+  seed/               # planted credentials, rendered from *.tmpl
   dist/               # player-facing files, listed under files:
   writeup/            # exploit.sh (healthcheck) + WRITEUP.md, never shipped
-platform/             # CTFd config, theme, plugins
-compose.yaml
+compose.yaml          # the platform: CTFd, database, cache
 ```
+
+The two compose layers deploy to different hosts — the platform once, the challenge
+services once per team.
 
 `dist/` and `writeup/` are ctfcli's own conventions — the spec wires
 `healthcheck: writeup/exploit.sh` and `files: dist/...`. Follow them.
