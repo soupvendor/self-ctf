@@ -31,4 +31,6 @@ jobs:
 
       - name: Tear down
         if: always()
-        run: mise run down
+        run: |
+          mise run challenges:down
+          mise run down

@@ -3,6 +3,10 @@ python = "3.12"
 uv = "0.12.3"
 "pipx:ctfcli" = "0.1.8"
 
+# Stage 3 is an AWS enumeration challenge, so players need this anyway and the
+# solver drives LocalStack through it rather than through a second interface.
+aws-cli = "2.36.20"
+
 # Code quality. hk drives them as git hooks and in CI; see hk.pkl.
 hk = "1.54.1"
 ruff = "0.16.2"
@@ -40,7 +44,7 @@ description = "Generate a random flag for every FLAG_* placeholder in .env"
 run = "python3 scripts/genflags.py"
 
 [tasks.up]
-description = "Start CTFd"
+description = "Start the CTFd platform"
 run = "docker compose up -d"
 
 [tasks.down]
@@ -50,6 +54,28 @@ run = "docker compose down -v"
 [tasks.logs]
 description = "Tail CTFd logs"
 run = "docker compose logs -f"
+
+[tasks."challenges:up"]
+description = "Start the challenge services (the stack that runs on team hosts)"
+depends = ["render"]
+# Two steps because `up --wait` counts a one-shot container as failed the
+# moment it exits, even successfully. `wait` returns the seeder's own exit
+# code, so a broken seed fails here rather than surfacing as a puzzle that
+# quietly has no answer in it.
+run = """
+set -e
+docker compose -f compose.challenges.yaml up -d
+docker compose -f compose.challenges.yaml wait gitea-seed
+docker compose -f compose.challenges.yaml up -d --wait gitea localstack
+"""
+
+[tasks."challenges:down"]
+description = "Stop the challenge services and delete their state"
+run = "docker compose -f compose.challenges.yaml down -v"
+
+[tasks."challenges:logs"]
+description = "Tail challenge service logs"
+run = "docker compose -f compose.challenges.yaml logs -f"
 
 [tasks.bootstrap]
 description = "Run CTFd's first-time setup and mint an API token for ctfcli"
@@ -118,5 +144,6 @@ run = [
   "mise run up",
   "mise run bootstrap",
   "mise run sync",
+  "mise run challenges:up",
   "mise run healthcheck",
 ]

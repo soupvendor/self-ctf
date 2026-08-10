@@ -1,0 +1,111 @@
+# Stage 2 (Gitea) and stage 3 (LocalStack). Stage 1 ships as a downloadable
+# file, so it has no service here.
+#
+# Assume a player gets code execution in these containers: no Docker socket, no
+# host paths beyond the read-only seed fixtures each service needs to exist, and
+# no credential that reaches CTFd or another challenge.
+
+services:
+  gitea:
+    # Rootless variant: the default image starts as root and drops privileges
+    # via s6, which leaves PID 1 running as root.
+    image: gitea/gitea:1.27.1-rootless
+    restart: unless-stopped
+    environment:
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__ROOT_URL: http://${CHALLENGE_HOST:?set CHALLENGE_HOST in .env}:${GITEA_PORT:?set GITEA_PORT in .env}/
+      GITEA__security__INSTALL_LOCK: "true"
+      # Players get in with the account they recover, not one they create.
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      # Lets the seed push the repo into existence instead of calling the API
+      # to create it first. Repos made this way are private by default.
+      GITEA__repository__ENABLE_PUSH_CREATE_USER: "true"
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+    ports:
+      - "${GITEA_PORT:?set GITEA_PORT in .env}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 200
+
+  # Runs once per `up`, then exits. Seeding has to be part of the stack rather
+  # than a step someone remembers to run, because replacing a broken team stack
+  # is the recovery plan.
+  gitea-seed:
+    image: gitea/gitea:1.27.1-rootless
+    depends_on:
+      gitea:
+        condition: service_healthy
+    # Shares Gitea's volumes because `gitea admin user create` is a local CLI
+    # against the same app.ini and database - there is no API for the first user.
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+      - ./seed:/seed:ro
+    # The deploy-bot password players recover, read from the same rendered file
+    # that gets baked into the stage 1 image, so the two cannot drift apart.
+    env_file:
+      - ./seed/deploy-creds.env
+    environment:
+      GITEA_INTERNAL_URL: http://gitea:3000
+      GITEA_ADMIN_NAME: gitea-admin
+      GITEA_ADMIN_EMAIL: gitea-admin@internal.local
+      GITEA_ADMIN_PASSWORD: ${GITEA_ADMIN_PASSWORD:?set GITEA_ADMIN_PASSWORD in .env}
+      REPO_NAME: internal-deploy
+    entrypoint: ["/bin/bash", "/seed/gitea-seed.sh"]
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+  localstack:
+    # Pinned to the last release that runs without a LocalStack account: the
+    # 2026.x stream refuses to start without an auth token.
+    image: localstack/localstack:4.11.1
+    restart: unless-stopped
+    environment:
+      # Only what stage 3 needs. Lambda is deliberately absent - it is the
+      # feature that would want the Docker socket mounted.
+      SERVICES: secretsmanager,ssm,s3,sts,iam
+      DEBUG: "0"
+    volumes:
+      # LocalStack's documented seeding hook: anything in ready.d runs once the
+      # API is up. Read-only, and a fixture rather than a host directory the
+      # container can write back through.
+      - ./seed/localstack-seed.sh:/etc/localstack/init/ready.d/01-seed.sh:ro
+    ports:
+      - "${LOCALSTACK_PORT:?set LOCALSTACK_PORT in .env}:4566"
+    healthcheck:
+      # Deliberately asserts the seeded secret exists rather than asking
+      # LocalStack whether it is up: /_localstack/init/ready answers 200 even
+      # when a ready.d script has failed, which would report a stack with an
+      # empty Secrets Manager as healthy.
+      test:
+        [
+          "CMD-SHELL",
+          "awslocal secretsmanager describe-secret --secret-id platform/break-glass/root-recovery >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+volumes:
+  gitea-data:
+  gitea-config:

@@ -1,0 +1,10 @@
+# The answer key must never enter the build context, and neither may the flags
+# for the stages this image is not about: only stage 1's credentials file is
+# ever COPYed in.
+writeup/
+challenge.yml
+challenge.yml.tmpl
+dist/
+compose.yaml
+seed/*
+!seed/deploy-creds.env

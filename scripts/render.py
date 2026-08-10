@@ -29,6 +29,9 @@ def main() -> int:
             failed = True
             continue
         target.write_text(rendered)
+        # Carry the mode across: a rendered init script that lost its execute
+        # bit is silently skipped by whatever was meant to run it.
+        target.chmod(tmpl.stat().st_mode & 0o777)
         print(f"   {tmpl.relative_to(ROOT)} -> {target.relative_to(ROOT)}")
 
     if failed:
