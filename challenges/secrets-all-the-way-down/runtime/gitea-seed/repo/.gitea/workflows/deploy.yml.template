@@ -10,7 +10,7 @@ env:
   AWS_DEFAULT_REGION: us-east-1
   AWS_ACCESS_KEY_ID: AKIAI0STAGING0DEPLOYER
   AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY01
-  AWS_ENDPOINT_URL: http://${CHALLENGE_HOST}:${LOCALSTACK_PORT}
+  AWS_ENDPOINT_PORT: __LOCALSTACK_PORT__
 
 jobs:
   deploy:
@@ -22,10 +22,10 @@ jobs:
         # This echo lands in the build log on every run, which is its own
         # problem, but it is also handy for you right now:
         run: |
-          echo "deploying as $$AWS_ACCESS_KEY_ID"
-          echo "stage 2 checkpoint: ${FLAG_PIPELINE}"
+          echo "deploying as $AWS_ACCESS_KEY_ID"
+          echo "stage 2 checkpoint: __FLAG_PIPELINE__"
 
       - name: Push infra
         run: |
-          aws --endpoint-url "$$AWS_ENDPOINT_URL" sts get-caller-identity
+          aws --endpoint-url "http://TEAM_HOST:$AWS_ENDPOINT_PORT" sts get-caller-identity
           echo "applying terraform..."

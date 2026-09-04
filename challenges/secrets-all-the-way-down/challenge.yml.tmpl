@@ -17,6 +17,9 @@ description: |
   `docker load -i internal-deployer.tar` to work with it as a normal image, or
   unpack the tar directly — either route is fine.
 
+  Use the team hostname assigned by your organizer with every service port you
+  recover. The downloadable image is shared and does not contain that hostname.
+
 attribution: self-ctf
 value: 300
 type: standard
@@ -27,7 +30,7 @@ host: null
 
 # Where the chain starts. The services for stages 2 and 3 are reached with
 # details the earlier stages hand over, so naming them here would skip the work.
-connection_info: Start with the attached file.
+connection_info: Start with the attached file and your assigned team hostname.
 healthcheck: writeup/exploit.sh
 solution:
   path: writeup/WRITEUP.md

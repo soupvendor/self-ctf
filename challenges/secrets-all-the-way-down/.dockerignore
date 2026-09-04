@@ -1,10 +1,10 @@
-# The answer key must never enter the build context, and neither may the flags
-# for the stages this image is not about: only stage 1's credentials file is
-# ever COPYed in.
+# This context builds only the event-specific player artifact. Reusable runtime
+# images have separate allowlisted contexts under runtime/.
 writeup/
 challenge.yml
 challenge.yml.tmpl
 dist/
 compose.yaml
+runtime/
 seed/*
 !seed/deploy-creds.env

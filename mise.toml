@@ -57,7 +57,7 @@ run = "docker compose logs -f"
 
 [tasks."challenges:up"]
 description = "Start the challenge services (the stack that runs on team hosts)"
-depends = ["render"]
+depends = ["render", "challenges:images"]
 # Two steps because `up --wait` counts a one-shot container as failed the
 # moment it exits, even successfully. `wait` returns the seeder's own exit
 # code, so a broken seed fails here rather than surfacing as a puzzle that
@@ -67,6 +67,16 @@ set -e
 docker compose -f compose.challenges.yaml up -d
 docker compose -f compose.challenges.yaml wait gitea-seed
 docker compose -f compose.challenges.yaml up -d --wait gitea localstack
+"""
+
+[tasks."challenges:images"]
+description = "Build the reusable, flag-free challenge runtime images"
+run = """
+set -e
+docker compose -f compose.challenges.yaml build gitea-seed localstack
+bash scripts/check-runtime-images.sh \
+  "${GITEA_SEED_IMAGE:-self-ctf/gitea-seed:local}" \
+  "${LOCALSTACK_IMAGE:-self-ctf/localstack-seeded:local}"
 """
 
 [tasks."challenges:down"]

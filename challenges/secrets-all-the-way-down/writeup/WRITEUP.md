@@ -5,9 +5,9 @@ the order is forced by the challenge even though CTFd accepts the flags in any
 order.
 
 `writeup/exploit.sh` performs all three stages end to end and is wired in as the
-challenge's healthcheck. It reads nothing from `.env` except the flags it
-verifies — every endpoint and credential comes out of the previous stage, so a
-broken handoff fails the build.
+challenge's healthcheck. It reads the assigned team hostname and the flags it
+verifies from `.env`; every service port and credential comes out of the
+challenge, so a broken handoff fails the build.
 
 ## Stage 1 — the layer that still has it
 
@@ -35,8 +35,10 @@ find /tmp/solve -type f -exec tar -xOf {} opt/deploy/creds.env \; 2>/dev/null
 `DEPLOY_TOKEN` is flag 1. `docker history --no-trunc` shows the `rm`, and `dive`
 browses layer A interactively — both reach the same place.
 
-**The handoff:** the same file carries `CI_URL`, `CI_USER`, and `CI_PASS`. That
-is the point of the hint "the file you recover is not just a flag".
+**The handoff:** the same file carries `CI_PORT`, `CI_USER`, and `CI_PASS`.
+Combine the port with the hostname assigned to the team. Keeping the hostname
+outside the artifact lets every team receive the same download. That is the
+point of the hint "the file you recover is not just a flag".
 
 ## Stage 2 — the pipeline that says too much
 
@@ -45,7 +47,7 @@ private repository, `internal-deploy`, whose `.gitea/workflows/deploy.yml` holds
 
 - flag 2, echoed by the "Show deploy identity" step — a secret written into every
   build log
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_ENDPOINT_URL` in the
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_ENDPOINT_PORT` in the
   workflow `env:` block, committed to version control because repo secrets were
   "not working"
 
@@ -57,9 +59,9 @@ stage 3.
 
 ## Stage 3 — a break-glass secret nobody scoped
 
-Point the AWS CLI at the endpoint from the workflow and enumerate. The flag sits
-in Secrets Manager under a deliberately non-obvious name among decoys, so listing
-has to happen before reading.
+Combine the endpoint port from the workflow with the assigned team hostname and
+enumerate. The flag sits in Secrets Manager under a deliberately non-obvious
+name among decoys, so listing has to happen before reading.
 
 ```bash
 export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
