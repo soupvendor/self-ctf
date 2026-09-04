@@ -72,6 +72,8 @@ a public clone must not spoil a live event.
 
 ## Challenge authoring
 
+- Player challenges ship with `state: visible`. Use requirements to lock progression;
+  visibility is not the release mechanism for this event.
 - A challenge is not done until an automated solver runs end-to-end against a fresh
   instance and returns the flag. Unsolvable by script means unverifiable.
 - The solver is `writeup/exploit.sh`, wired in as `healthcheck:` in `challenge.yml`.
@@ -95,6 +97,8 @@ a public clone must not spoil a live event.
 CTFd runs on its own host. Challenge services run separately, one stack per team, so one
 player cannot break a challenge for everyone else.
 
+- CTFd runs in team mode with self-registration. Players create individual profiles,
+  then create or join a team; solves and partial flags belong to that team.
 - **The platform host is stateful.** CTFd holds accounts, solves, and scores. Back it up;
   never treat it as disposable mid-event.
 - **Team stacks are disposable.** They must come back from nothing with a single command,

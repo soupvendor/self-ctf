@@ -24,11 +24,12 @@ user_exists() {
   gitea admin user list | awk 'NR > 1 { print $2 }' | grep -qx "$1"
 }
 
-create_user() {
+ensure_user() {
   local username=$1 password=$2 email=$3
   shift 3
   if user_exists "$username"; then
-    echo "    $username already exists"
+    gitea admin user change-password --username "$username" --password "$password" \
+      --must-change-password=false
     return
   fi
   gitea admin user create --username "$username" --password "$password" \
@@ -38,8 +39,8 @@ create_user() {
 echo "==> Creating accounts"
 # The admin has to exist first: Gitea makes the very first user an
 # administrator, and the account players log in with must not be one.
-create_user "$GITEA_ADMIN_NAME" "$GITEA_ADMIN_PASSWORD" "$GITEA_ADMIN_EMAIL" --admin
-create_user "$CI_USER" "$CI_PASS" "$CI_USER@internal.local"
+ensure_user "$GITEA_ADMIN_NAME" "$GITEA_ADMIN_PASSWORD" "$GITEA_ADMIN_EMAIL" --admin
+ensure_user "$CI_USER" "$CI_PASS" "$CI_USER@internal.local"
 
 echo "==> Pushing $CI_USER/$REPO_NAME"
 host="${GITEA_INTERNAL_URL#*://}"

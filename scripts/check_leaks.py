@@ -31,6 +31,15 @@ def tracked_files() -> list[str]:
     return out.stdout.split()
 
 
+def tracked_challenges(tracked: set[str]) -> list[Path]:
+    names = set()
+    for rel in tracked:
+        match Path(rel).parts:
+            case ("challenges", name, *_):
+                names.add(name)
+    return [ROOT / "challenges" / name for name in sorted(names)]
+
+
 def no_flag_committed(values: dict[str, str], tracked: set[str]) -> list[str]:
     problems = []
     for rel in sorted(tracked):
@@ -162,7 +171,7 @@ def main() -> int:
         f"{path} is tracked by git and must never be" for path in NEVER_TRACKED if path in tracked
     ]
     problems += no_flag_committed(values, tracked) + templates_tracked(tracked) + rendered_ignored()
-    for challenge in sorted(ROOT.glob("challenges/*/")):
+    for challenge in tracked_challenges(tracked):
         problems += (
             answer_key_excluded(challenge)
             + readme_clean(challenge, values, tracked)

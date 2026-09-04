@@ -95,15 +95,16 @@ description = "Lint every challenge.yml"
 depends = ["render", "register"]
 run = """
 set -e
-for dir in challenges/*/; do
-  [ -f "$dir/challenge.yml" ] || continue
+for template in challenges/*/challenge.yml.tmpl; do
+  [ -f "$template" ] || continue
+  dir="${template%/challenge.yml.tmpl}"
   if [ -f "$dir/.expect-flag-in-artifact" ]; then
     # Recovering the flag from the artifact IS this challenge, so ctfcli's
     # distributed-file scan is wrong here. Point it at a string that cannot
     # occur so every other lint check still runs.
-    ctf challenge lint "${dir%/}" --flag_format "__no_such_flag_format__"
+    ctf challenge lint "$dir" --flag_format "__no_such_flag_format__"
   else
-    ctf challenge lint "${dir%/}"
+    ctf challenge lint "$dir"
   fi
 done
 """
@@ -127,9 +128,10 @@ description = "Solve every challenge programmatically"
 depends = ["render"]
 run = """
 set -e
-for dir in challenges/*/; do
-  [ -f "$dir/challenge.yml" ] || continue
-  ctf challenge healthcheck "${dir%/}"
+for template in challenges/*/challenge.yml.tmpl; do
+  [ -f "$template" ] || continue
+  dir="${template%/challenge.yml.tmpl}"
+  ctf challenge healthcheck "$dir"
 done
 """
 
