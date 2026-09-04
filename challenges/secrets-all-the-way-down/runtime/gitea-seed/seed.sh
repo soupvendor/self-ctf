@@ -37,6 +37,26 @@ host="${host%%[:/]*}"
 printf 'machine %s\nlogin %s\npassword %s\n' "$host" "$CI_USER" "$CI_PASS" >"$HOME/.netrc"
 chmod 600 "$HOME/.netrc"
 
+[[ "$REPO_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || {
+  echo "!! REPO_NAME contains characters that cannot be safely sent to Gitea" >&2
+  exit 1
+}
+repo_api="$GITEA_INTERNAL_URL/api/v1/repos/$CI_USER/$REPO_NAME"
+repo_status="$(curl --netrc -sS -o /dev/null -w '%{http_code}' "$repo_api")"
+case "$repo_status" in
+  200) ;;
+  404)
+    curl --netrc -fsS \
+      -H "Content-Type: application/json" \
+      --data "{\"name\":\"$REPO_NAME\",\"private\":true,\"default_branch\":\"main\"}" \
+      "$GITEA_INTERNAL_URL/api/v1/user/repos" >/dev/null
+    ;;
+  *)
+    echo "!! Gitea repository lookup returned HTTP $repo_status" >&2
+    exit 1
+    ;;
+esac
+
 work="$(mktemp -d)"
 cp -a /opt/self-ctf/repo/. "$work/"
 
@@ -62,10 +82,10 @@ git -c user.email="$CI_USER@internal.local" -c user.name="$CI_USER" \
   commit -q -m "initial deploy automation"
 git push -q --force "$GITEA_INTERNAL_URL/$CI_USER/$REPO_NAME.git" main
 
-seeded_workflow="$GITEA_INTERNAL_URL/api/v1/repos/$CI_USER/$REPO_NAME/raw/.gitea/workflows/deploy.yml?ref=main"
-seeded_contents="$(curl --netrc -fsS "$seeded_workflow")"
-grep -Fq "$FLAG_PIPELINE" <<<"$seeded_contents" || {
-  echo "!! seeded workflow is not readable from the main branch" >&2
+verification="$(mktemp -d)"
+git clone -q --branch main "$GITEA_INTERNAL_URL/$CI_USER/$REPO_NAME.git" "$verification"
+grep -Fq "$FLAG_PIPELINE" "$verification/.gitea/workflows/deploy.yml" || {
+  echo "!! cloned workflow does not contain the configured pipeline flag" >&2
   exit 1
 }
 

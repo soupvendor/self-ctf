@@ -16,9 +16,6 @@ services:
       GITEA__security__INSTALL_LOCK: "true"
       # Players get in with the account they recover, not one they create.
       GITEA__service__DISABLE_REGISTRATION: "true"
-      # Lets the seed push the repo into existence instead of calling the API
-      # to create it first. Repos made this way are private by default.
-      GITEA__repository__ENABLE_PUSH_CREATE_USER: "true"
     volumes:
       - gitea-data:/var/lib/gitea
       - gitea-config:/etc/gitea
