@@ -1,0 +1,31 @@
+name: deploy-to-staging
+
+on:
+  push:
+    branches: [main]
+
+# NOTE(ops): we kept hitting "credentials not found" when these lived in repo
+# secrets, so they are inlined here for now. Clean this up later.
+env:
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: AKIAI0STAGING0DEPLOYER
+  AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY01
+  AWS_ENDPOINT_URL: http://${CHALLENGE_HOST}:${LOCALSTACK_PORT}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show deploy identity
+        # This echo lands in the build log on every run, which is its own
+        # problem, but it is also handy for you right now:
+        run: |
+          echo "deploying as $$AWS_ACCESS_KEY_ID"
+          echo "stage 2 checkpoint: ${FLAG_PIPELINE}"
+
+      - name: Push infra
+        run: |
+          aws --endpoint-url "$$AWS_ENDPOINT_URL" sts get-caller-identity
+          echo "applying terraform..."

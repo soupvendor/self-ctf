@@ -1,0 +1,18 @@
+# Challenge services - the half of the deployment that runs on team hosts, one
+# stack per team. The platform (CTFd, database, cache) is the root compose.yaml
+# and runs on its own host.
+#
+# Keeping them apart is the containment rule from AGENTS.md: a player who breaks
+# a challenge, or gets code execution inside one, reaches nothing that scores the
+# event. Nothing here needs a CTFd credential, and nothing here may be given one.
+#
+# Each challenge owns its own compose.yaml so a stack can be reasoned about, and
+# torn down, one challenge at a time.
+
+# Named explicitly because both stacks live in one directory: without this they
+# would share a Compose project, and tearing down one would take the other with
+# it. The platform keeps the default name so existing deployments are untouched.
+name: self-ctf-challenges
+
+include:
+  - challenges/secrets-all-the-way-down/compose.yaml

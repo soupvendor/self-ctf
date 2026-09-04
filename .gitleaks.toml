@@ -19,4 +19,9 @@ paths = [
   # and check_leaks.py fails outright if either ever becomes tracked.
   '''^\.env$''',
   '''^\.ctf/config$''',
+  # Claude worktrees are separate checkouts but live below this one. Their own
+  # hooks scan their tracked files; this checkout must ignore only their local
+  # secret files for the same reason it ignores its own above.
+  '''^\.claude/worktrees/[^/]+/\.env$''',
+  '''^\.claude/worktrees/[^/]+/\.ctf/config$''',
 ]

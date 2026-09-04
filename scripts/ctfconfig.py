@@ -35,7 +35,7 @@ def main() -> int:
 
     config["challenges"] = {
         str(path.parent.relative_to(ROOT)): str(path.parent.relative_to(ROOT))
-        for path in sorted(ROOT.glob("challenges/*/challenge.yml"))
+        for path in sorted(ROOT.glob("challenges/*/challenge.yml.tmpl"))
     }
 
     CONFIG.parent.mkdir(exist_ok=True)

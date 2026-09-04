@@ -1,0 +1,11 @@
+FLAG_LAYERS
+
+Recovering that flag from dist/internal-deployer.tar is the entire first stage,
+so ctfcli's "potential flag found in distributed file" check is correct in
+general and wrong here. `mise run lint` disables that one scan for this
+challenge; every other lint check still applies.
+
+The line above is load-bearing, not a note: scripts/check_leaks.py reads the
+FLAG_* names from this file and fails if any *other* flag reaches dist/. Without
+it, disabling ctfcli's scan would also stop anyone noticing that stage 2's or
+stage 3's flag had been baked into the download.

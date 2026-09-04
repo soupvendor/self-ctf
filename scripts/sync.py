@@ -54,9 +54,8 @@ def main() -> int:
 
     existing = remote_names(config["config"]["url"], config["config"]["access_token"])
 
-    for path in sorted(ROOT.glob("challenges/*/")):
-        if not (path / "challenge.yml").exists():
-            continue
+    for template in sorted(ROOT.glob("challenges/*/challenge.yml.tmpl")):
+        path = template.parent
         rel = path.relative_to(ROOT)
         verb = "sync" if local_name(path) in existing else "install"
         print(f"==> {verb} {rel}")

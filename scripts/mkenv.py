@@ -16,7 +16,25 @@ GENERATED = {
     "CTFD_SECRET_KEY": lambda: secrets.token_hex(32),
     "CTFD_DB_PASSWORD": lambda: secrets.token_hex(16),
     "CTFD_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(24),
+    "GITEA_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(24),
 }
+
+
+def keys(lines: list[str]) -> set[str]:
+    return {line.partition("=")[0] for line in lines if "=" in line}
+
+
+def add_new_settings(lines: list[str]) -> list[str]:
+    """Carry over settings added to .env.example since this .env was written."""
+    example = EXAMPLE.read_text().splitlines()
+    missing = [
+        line for line in example if "=" in line and line.partition("=")[0] not in keys(lines)
+    ]
+    if not missing:
+        return lines
+    for line in missing:
+        print(f"   added {line.partition('=')[0]} from .env.example")
+    return [*lines, "", *missing]
 
 
 def main() -> int:
@@ -24,7 +42,11 @@ def main() -> int:
         ENV.write_text(EXAMPLE.read_text())
         print("   created .env from .env.example")
 
-    lines = ENV.read_text().splitlines()
+    # Compared as text, not as lists: add_new_settings returns its argument
+    # unchanged when nothing is missing, so a list comparison would be against
+    # the same object the fill loop just mutated, and would never write.
+    before = ENV.read_text()
+    lines = add_new_settings(before.splitlines())
     filled = []
     for i, line in enumerate(lines):
         var, sep, value = line.partition("=")
@@ -32,11 +54,12 @@ def main() -> int:
             lines[i] = f"{var}={GENERATED[var]()}"
             filled.append(var)
 
-    if filled:
-        ENV.write_text("\n".join(lines) + "\n")
-        for var in filled:
-            print(f"   generated {var}")
-    else:
+    after = "\n".join(lines) + "\n"
+    if after != before:
+        ENV.write_text(after)
+    for var in filled:
+        print(f"   generated {var}")
+    if not filled:
         print("   secrets already set")
     return 0
 

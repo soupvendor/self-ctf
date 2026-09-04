@@ -1,0 +1,75 @@
+name: Secrets All the Way Down
+author: self-ctf
+category: DevOps
+description: |
+  The platform team shipped the `internal-deployer` image in a hurry. Someone
+  baked a deploy token into it, noticed, and removed the file in a follow-up
+  build step. They are confident the token is gone.
+  Convince them otherwise.
+
+  Then keep pulling the thread. What that image gives up gets you into the next
+  system, and what is sitting in there gets you into the one after that.
+
+  Three flags, 300 points together. Submit each one as you find it — the
+  challenge is solved once all three are in, in any order.
+
+  Note: The image is attached as a `docker save` archive. Load it with
+  `docker load -i internal-deployer.tar` to work with it as a normal image, or
+  unpack the tar directly — either route is fine.
+
+attribution: self-ctf
+value: 300
+type: standard
+
+image: null
+protocol: null
+host: null
+
+# Where the chain starts. The services for stages 2 and 3 are reached with
+# details the earlier stages hand over, so naming them here would skip the work.
+connection_info: Start with the attached file.
+healthcheck: writeup/exploit.sh
+solution:
+  path: writeup/WRITEUP.md
+  state: hidden
+
+attempts: 20
+
+# All three flags, order-independent. CTFd tracks partial progress server-side,
+# so a correct flag reports "more flags are required" rather than nothing.
+# This is not a chain in CTFd's sense - the ordering is enforced by the
+# challenge itself, since each stage hands over the credentials for the next.
+logic: all
+
+flags:
+  - ${FLAG_LAYERS}
+  - ${FLAG_PIPELINE}
+  - ${FLAG_CLOUD}
+
+topics:
+  - container internals
+  - information disclosure
+  - ci/cd secrets
+  - cloud secret enumeration
+
+tags:
+  - containers
+  - ci-cd
+  - cloud
+
+files:
+  - dist/internal-deployer.tar
+
+hints:
+  - content: Deleting a file in a later layer does not remove it from an earlier one.
+    cost: 0
+  - content: The file you recover is not just a flag. Read all of it.
+    cost: 50
+  - content: A deploy identity that can read a secret can usually list them too.
+    cost: 50
+
+requirements: []
+next: null
+
+state: visible
+version: "0.1"

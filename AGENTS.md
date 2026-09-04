@@ -48,7 +48,9 @@ a public clone must not spoil a live event.
 
 - Challenges commit `challenge.yml.tmpl` holding `${FLAG_<NAME>}`, never a literal flag.
   `mise run render` writes the real value into a gitignored `challenge.yml` from `.env`.
-  Same for any challenge file that embeds a flag.
+  Same for any challenge file that embeds a flag. `$` is significant in a `*.tmpl`: write
+  `$$` for a literal one, or a shell snippet meant for the player loses its variables.
+  Rendering preserves the template's file mode, so mark executables `+x` on the template.
 - ctfcli has no templating of its own, so the render step is ours. It still hands ctfcli a
   complete, valid `challenge.yml` through the normal interface — nothing is patched or
   bypassed. Consequence: `ctf challenge mirror` writes back to a generated file, so we
@@ -70,6 +72,8 @@ a public clone must not spoil a live event.
 
 ## Challenge authoring
 
+- Player challenges ship with `state: visible`. Use requirements to lock progression;
+  visibility is not the release mechanism for this event.
 - A challenge is not done until an automated solver runs end-to-end against a fresh
   instance and returns the flag. Unsolvable by script means unverifiable.
 - The solver is `writeup/exploit.sh`, wired in as `healthcheck:` in `challenge.yml`.
@@ -93,6 +97,8 @@ a public clone must not spoil a live event.
 CTFd runs on its own host. Challenge services run separately, one stack per team, so one
 player cannot break a challenge for everyone else.
 
+- CTFd runs in team mode with self-registration. Players create individual profiles,
+  then create or join a team; solves and partial flags belong to that team.
 - **The platform host is stateful.** CTFd holds accounts, solves, and scores. Back it up;
   never treat it as disposable mid-event.
 - **Team stacks are disposable.** They must come back from nothing with a single command,
@@ -107,13 +113,31 @@ player cannot break a challenge for everyone else.
 
 ## Multi-stage chains
 
-- One stage, one challenge, chained with `requirements.prerequisites`. `anonymize: true`
-  shows a locked placeholder; `false` hides the stage outright.
+Two shapes, and the choice is about scoring, not sequencing.
+
+**Separate challenges** — one stage, one challenge, chained with
+`requirements.prerequisites`. `anonymize: true` shows a locked placeholder; `false` hides
+the stage outright.
+
 - Handoff context — recovered credentials, which service to attack next — belongs in the
   next stage's description, which players can't read until they unlock it.
 - Set `next:` so a solve points at the follow-up and the narrative pulls forward.
-- Do not try to sequence several flags inside one challenge. `logic: all` is unordered and
-  will not enforce a chain.
+- Use this when stages should score independently, so a team that gets partway still
+  banks points.
+
+**One challenge, several flags** — `logic: all`, one flag per stage.
+
+- CTFd tracks partial progress server-side, so each correct flag answers "more flags are
+  required" rather than nothing. In team mode that progress is shared across the team.
+- Points award **once, on completion**. A team that solves two stages of three scores
+  zero, which is the whole trade against separate challenges.
+- `logic: all` cannot enforce order — but it does not have to when each stage hands over
+  the credentials for the next, because the puzzle enforces it. Do not rely on `logic`
+  for sequencing that the challenge content does not already guarantee.
+- Handoff context has nowhere to hide here: there is one description for all stages, so
+  it must live in the artifacts players recover, not in the challenge metadata.
+- The solver must recover and verify **every** flag. One that returns the first would
+  pass while the challenge is only partly solvable.
 
 ## Running things
 
@@ -138,8 +162,10 @@ Do not report a task complete on inspection alone. "Should work" is not done.
 | Static checks (as the hooks run) | `mise run check` |
 | Autofix formatting and lint | `hk fix --all` |
 | Install the git hooks | `mise run hooks:install` |
-| Stand up the platform | `docker compose up -d` |
-| Tear down (destructive) | `docker compose down -v` |
+| Stand up the platform | `mise run up` |
+| Tear down the platform (destructive) | `mise run down` |
+| Stand up the challenge services | `mise run challenges:up` |
+| Tear down the challenge services | `mise run challenges:down` |
 | Scaffold a challenge | `ctf challenge new` |
 | Create it in CTFd (first time) | `ctf challenge install <name>` |
 | Push later edits to CTFd | `ctf challenge sync <name>` |
@@ -155,21 +181,31 @@ Host tooling is managed with `mise`: `mise install`.
 
 ## Layout
 
-Target structure — parts of this do not exist yet.
-
 ```
 challenges/<name>/
   challenge.yml       # ctfcli metadata
   compose.yaml        # challenge services, if any — runs on team hosts
   artifact.Dockerfile # if the challenge ships a file rather than a service
-  seed/               # planted credentials, rendered from *.tmpl
+  seed/               # planted credentials and fixtures, rendered from *.tmpl
   dist/               # player-facing files, listed under files:
   writeup/            # exploit.sh (healthcheck) + WRITEUP.md, never shipped
 compose.yaml          # the platform: CTFd, database, cache
+compose.challenges.yaml  # includes every challenge's compose.yaml
 ```
 
-The two compose layers deploy to different hosts — the platform once, the challenge
-services once per team.
+The two compose files deploy to different hosts — the platform once, the challenge
+services once per team — and carry separate Compose project names so tearing one down
+cannot take the other with it.
+
+Seeding belongs **inside** the challenge stack, as a service that runs on `up`, not in a
+script an operator remembers. Replacing a broken team stack is the recovery plan, so a
+stack that needs a manual step after `up` is a stack that comes back wrong. Make the
+readiness check assert the seed actually landed: a service that reports healthy with an
+empty datastore turns a seeding bug into a puzzle with no answer in it.
+
+A fixture that ships to players verbatim cannot carry the "planted vulnerability" comment
+this file requires elsewhere — it would hand over the answer. Put those notes in a
+`seed/README.md`, which never leaves the repo, and keep the shipped file authentic.
 
 `dist/` and `writeup/` are ctfcli's own conventions — the spec wires
 `healthcheck: writeup/exploit.sh` and `files: dist/...`. Follow them.
