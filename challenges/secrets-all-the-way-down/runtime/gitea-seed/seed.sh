@@ -62,4 +62,11 @@ git -c user.email="$CI_USER@internal.local" -c user.name="$CI_USER" \
   commit -q -m "initial deploy automation"
 git push -q --force "$GITEA_INTERNAL_URL/$CI_USER/$REPO_NAME.git" main
 
+seeded_workflow="$GITEA_INTERNAL_URL/api/v1/repos/$CI_USER/$REPO_NAME/raw/.gitea/workflows/deploy.yml?ref=main"
+seeded_contents="$(curl --netrc -fsS "$seeded_workflow")"
+grep -Fq "$FLAG_PIPELINE" <<<"$seeded_contents" || {
+  echo "!! seeded workflow is not readable from the main branch" >&2
+  exit 1
+}
+
 echo "==> Seed complete"
