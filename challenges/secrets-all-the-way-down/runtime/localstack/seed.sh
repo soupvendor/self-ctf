@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# PLANTED VULNERABILITY - do not "fix" this.
-#
-# The flaw: a break-glass secret readable by an ordinary deploy identity, with
-# an SSM parameter pointing straight at it. Stage 3 is enumeration - list before
-# you can read - so the prize sits among decoys under a non-obvious name.
-#
-# Runs automatically once LocalStack is ready; see the ready.d mount in
-# compose.yaml.
+# PLANTED VULNERABILITY: the deploy identity can enumerate the break-glass flag.
 set -euo pipefail
+
+: "${FLAG_CLOUD:?}"
 
 echo "[seed] populating internal cloud account..."
 
@@ -19,12 +14,10 @@ awslocal secretsmanager create-secret \
   --name "platform/deploy/legacy-token" \
   --secret-string "expired-do-not-use" >/dev/null
 
-# shellcheck disable=SC2016 # render.py substitutes this, not the shell - and the
-# quotes stay single so the flag reaches awslocal exactly as generated.
 awslocal secretsmanager create-secret \
   --name "platform/break-glass/root-recovery" \
   --description "emergency access - restricted" \
-  --secret-string '${FLAG_CLOUD}' >/dev/null
+  --secret-string "$FLAG_CLOUD" >/dev/null
 
 awslocal ssm put-parameter \
   --name "/platform/notes/ops-todo" \
@@ -37,7 +30,7 @@ awslocal ssm put-parameter \
   --value "us-east-1" >/dev/null
 
 awslocal s3 mb s3://internal-terraform-state >/dev/null
-echo "terraform state placeholder" |
-  awslocal s3 cp - s3://internal-terraform-state/staging.tfstate >/dev/null
+echo "terraform state placeholder" \
+  | awslocal s3 cp - s3://internal-terraform-state/staging.tfstate >/dev/null
 
 echo "[seed] done."

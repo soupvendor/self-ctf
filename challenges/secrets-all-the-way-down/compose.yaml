@@ -2,8 +2,7 @@
 # file, so it has no service here.
 #
 # Assume a player gets code execution in these containers: no Docker socket, no
-# host paths beyond the read-only seed fixtures each service needs to exist, and
-# no credential that reaches CTFd or another challenge.
+# host paths, and no credential that reaches CTFd or another challenge.
 
 services:
   gitea:
@@ -43,7 +42,9 @@ services:
   # than a step someone remembers to run, because replacing a broken team stack
   # is the recovery plan.
   gitea-seed:
-    image: gitea/gitea:1.27.1-rootless
+    image: ${GITEA_SEED_IMAGE:-self-ctf/gitea-seed:local}
+    build:
+      context: ./runtime/gitea-seed
     depends_on:
       gitea:
         condition: service_healthy
@@ -52,18 +53,16 @@ services:
     volumes:
       - gitea-data:/var/lib/gitea
       - gitea-config:/etc/gitea
-      - ./seed:/seed:ro
-    # The deploy-bot password players recover, read from the same rendered file
-    # that gets baked into the stage 1 image, so the two cannot drift apart.
-    env_file:
-      - ./seed/deploy-creds.env
     environment:
       GITEA_INTERNAL_URL: http://gitea:3000
       GITEA_ADMIN_NAME: gitea-admin
       GITEA_ADMIN_EMAIL: gitea-admin@internal.local
       GITEA_ADMIN_PASSWORD: ${GITEA_ADMIN_PASSWORD:?set GITEA_ADMIN_PASSWORD in .env}
+      CI_USER: ${DEPLOY_USER:?set DEPLOY_USER in .env}
+      CI_PASS: ${DEPLOY_PASSWORD:?set DEPLOY_PASSWORD in .env}
+      FLAG_PIPELINE: ${FLAG_PIPELINE:?set FLAG_PIPELINE in .env}
+      LOCALSTACK_PORT: ${LOCALSTACK_PORT:?set LOCALSTACK_PORT in .env}
       REPO_NAME: internal-deploy
-    entrypoint: ["/bin/bash", "/seed/gitea-seed.sh"]
     restart: "no"
     security_opt:
       - no-new-privileges:true
@@ -71,18 +70,16 @@ services:
   localstack:
     # Pinned to the last release that runs without a LocalStack account: the
     # 2026.x stream refuses to start without an auth token.
-    image: localstack/localstack:4.11.1
+    image: ${LOCALSTACK_IMAGE:-self-ctf/localstack-seeded:local}
+    build:
+      context: ./runtime/localstack
     restart: unless-stopped
     environment:
       # Only what stage 3 needs. Lambda is deliberately absent - it is the
       # feature that would want the Docker socket mounted.
       SERVICES: secretsmanager,ssm,s3,sts,iam
       DEBUG: "0"
-    volumes:
-      # LocalStack's documented seeding hook: anything in ready.d runs once the
-      # API is up. Read-only, and a fixture rather than a host directory the
-      # container can write back through.
-      - ./seed/localstack-seed.sh:/etc/localstack/init/ready.d/01-seed.sh:ro
+      FLAG_CLOUD: ${FLAG_CLOUD:?set FLAG_CLOUD in .env}
     ports:
       - "${LOCALSTACK_PORT:?set LOCALSTACK_PORT in .env}:4566"
     healthcheck:

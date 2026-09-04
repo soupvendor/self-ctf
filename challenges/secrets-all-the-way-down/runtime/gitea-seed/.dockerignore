@@ -1,0 +1,5 @@
+*
+!Dockerfile
+!seed.sh
+!repo/
+!repo/**
