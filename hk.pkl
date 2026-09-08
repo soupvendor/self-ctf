@@ -12,6 +12,12 @@ local linters = new Mapping<String, Step> {
   ["actionlint"] = Builtins.actionlint
   ["gitleaks"] = Builtins.gitleaks
 
+  ["terraform-format"] {
+    glob = List("**/*.tf", "**/*.tftest.hcl", "**/*.tfmock.hcl")
+    check = "mise exec -- terraform fmt -check -recursive deploy/aws/terraform"
+    fix = "mise exec -- terraform fmt -recursive deploy/aws/terraform"
+  }
+
   // ctfcli's lint only recognises a file literally named `Dockerfile`, so our
   // artifact.Dockerfile gets no hadolint coverage from `mise run lint`.
   ["hadolint"] = (Builtins.hadolint) {

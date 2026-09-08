@@ -24,6 +24,9 @@ Docker Compose is the local and single-host path. Provider-specific deployments
 live under [`deploy/`](deploy/README.md) without forking the challenge
 definitions.
 
+The staged [AWS Terraform setup](deploy/aws/terraform/README.md) currently
+provides the network and image-registry foundation, not a complete deployment.
+
 ## Prerequisites
 
 - Docker Engine with Docker Compose
