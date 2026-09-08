@@ -238,11 +238,14 @@ challenges/*/dist/
 # Terraform provider cache, state, plans, and operator-specific configuration.
 .terraform/
 .terraform-check/
+.terraform-*/
 *.tfstate
 *.tfstate.*
 *.tfplan
 *.tfvars
 *.tfvars.json
 backend.hcl
+backend-*.hcl
+platform.secret.env
 crash.log
 crash.*.log

@@ -22,6 +22,21 @@ jobs:
           install: true
           cache: true
       - run: mise run terraform:check
+      - run: mise run platform:check
+
+  platform_restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: true
+          cache: true
+      - run: mise run platform:test
 
   ci:
     runs-on: ubuntu-latest

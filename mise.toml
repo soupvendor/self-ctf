@@ -34,12 +34,15 @@ run = "hk check --all"
 
 [tasks."terraform:check"]
 description = "Validate and mock-test AWS Terraform without credentials or a backend"
-env.TF_DATA_DIR = "{{config_root}}/deploy/aws/terraform/foundation/.terraform-check"
-run = [
-  "terraform -chdir=deploy/aws/terraform/foundation init -backend=false -input=false -lockfile=readonly",
-  "terraform -chdir=deploy/aws/terraform/foundation validate",
-  "terraform -chdir=deploy/aws/terraform/foundation test",
-]
+run = "bash scripts/check-terraform.sh"
+
+[tasks."platform:check"]
+description = "Unit-test platform startup, secret handling, and backup failure paths"
+run = "python3 -m unittest discover -s deploy/aws/platform/tests -v"
+
+[tasks."platform:test"]
+description = "Test the AWS Compose overlay and restore database/uploads into a fresh local stack"
+run = "python3 scripts/test-platform-restore.py"
 
 [tasks."hooks:install"]
 description = "Install hk's git hooks in this clone"

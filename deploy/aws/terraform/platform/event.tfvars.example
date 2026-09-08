@@ -1,0 +1,42 @@
+aws_region     = "us-east-1"
+aws_account_id = "123456789012"
+event_name     = "devops-ctf"
+platform_name  = "primary"
+
+vpc_id                            = "vpc-0123456789abcdef0"
+private_subnet_ids                 = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
+platform_subnet_id                 = "subnet-0123456789abcdef0"
+endpoint_client_security_group_id = "sg-0123456789abcdef0"
+ssm_endpoint_ids = {
+  ssm         = "vpce-00000000000000001"
+  ssmmessages = "vpce-00000000000000002"
+}
+
+ami_id               = "ami-0123456789abcdef0"
+ami_owner_account_id = "123456789012"
+instance_type        = "t3.medium"
+protect_instance     = true
+data_volume_size_gib = 50
+root_volume_size_gib = 30
+restore_snapshot_id  = null
+ebs_kms_key_arn       = null
+
+platform_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:devops-ctf/platform-000001"
+secret_kms_key_arn   = null
+
+# Replace these with published digests, mirroring the versions in compose.yaml.
+images = {
+  ctfd    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/ctfd@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  mariadb = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/mariadb@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  redis   = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/redis@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}
+
+certificate_arn     = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000001"
+admin_ipv4_cidrs    = ["10.10.10.10/32"]
+player_ipv4_cidrs   = ["10.20.0.0/16"]
+enable_player_access = false
+
+backup_enabled         = true
+backup_retention_count = 168
+alarm_sns_topic_arn     = null
+tags = { Owner = "platform-team" }

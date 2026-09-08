@@ -1,0 +1,63 @@
+services:
+  ctfd:
+    image: ${CTFD_IMAGE:?set CTFD_IMAGE}
+    environment:
+      REVERSE_PROXY: "1,1,0,0,0"
+      UPDATE_CHECK: "false"
+      SESSION_COOKIE_SECURE: "true"
+    volumes:
+      - ${CTFD_CONFIG_FILE:?set CTFD_CONFIG_FILE}:/opt/CTFd/CTFd/config.ini:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthcheck', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: ${MARIADB_IMAGE:?set MARIADB_IMAGE}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cache:
+    image: ${REDIS_IMAGE:?set REDIS_IMAGE}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  ctfd-logs:
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PLATFORM_DATA_DIR:?set PLATFORM_DATA_DIR}/ctfd-logs
+  ctfd-uploads:
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PLATFORM_DATA_DIR:?set PLATFORM_DATA_DIR}/ctfd-uploads
+  ctfd-db:
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PLATFORM_DATA_DIR:?set PLATFORM_DATA_DIR}/ctfd-db
+  ctfd-cache:
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PLATFORM_DATA_DIR:?set PLATFORM_DATA_DIR}/ctfd-cache
