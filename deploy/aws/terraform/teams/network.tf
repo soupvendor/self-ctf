@@ -114,9 +114,14 @@ data "aws_vpc_security_group_rule" "endpoint_clients" {
 resource "aws_security_group" "team" {
   for_each    = var.team_ids
   name_prefix = "${var.event_name}-${each.key}-team-"
-  description = "Closed team backend; player authorization and HTTPS are a later stage."
+  description = "Team backend; ingress only from the optional company-VPN ALB."
   vpc_id      = data.aws_vpc.selected.id
-  ingress     = []
-  egress      = []
-  tags        = { Team = each.key }
+  ingress = var.team_access == null ? [] : [for port in [3000, 4566] : {
+    description     = "HTTP from the TLS-terminating team ALB"
+    from_port       = port, to_port = port, protocol = "tcp"
+    security_groups = [aws_security_group.alb[0].id]
+    cidr_blocks     = [], ipv6_cidr_blocks = [], prefix_list_ids = [], self = false
+  }]
+  egress = []
+  tags   = { Team = each.key }
 }

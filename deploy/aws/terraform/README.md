@@ -9,15 +9,15 @@ stay provider-neutral; this directory owns only their AWS deployment.
 - [x] Portable challenge runtime images and environment contract
 - [x] Foundation configuration: existing network validation, endpoint access, ECR
 - [x] Platform configuration: CTFd EC2 host, encrypted EBS, and backup/restore
-- [x] Per-team Fargate tasks, ephemeral data, and automatic seeding (closed backends)
+- [x] Per-team Fargate tasks, ephemeral data, and automatic seeding
 - [x] Runtime secret injection and least-privilege execution roles; no team task role
-- [ ] Company-VPN access, enforced team authorization, HTTPS, private DNS, and endpoint outputs
-- [ ] Operator commands for image publishing and team create/reset/status/destroy
+- [x] Company-VPN HTTPS access, private DNS, and endpoint outputs (honor-system team ownership)
+- [x] Operator commands for image publishing and team create/reset/status/destroy
 - [ ] Two-team AWS rehearsal: isolation, solvers, reset, and platform recovery
 
-`foundation/`, [`platform/`](platform/README.md), and the closed
-[`teams/`](teams/README.md) backends are implemented, but have not been applied
-to AWS. Team access is still pending, so this is not yet a complete AWS CTF.
+`foundation/`, [`platform/`](platform/README.md), [`teams/`](teams/README.md), and
+[operator commands](../operator/README.md) are implemented, but have not been
+applied to AWS. The next step is a small rehearsal, not a live event.
 Each configuration uses separate state; resetting a team must not affect CTFd.
 
 ## Foundation setup
@@ -95,9 +95,10 @@ See [AWS's ECR endpoint requirements](https://docs.aws.amazon.com/AmazonECR/late
 ## Images and lifecycle
 
 `ecr_repository_names` defaults to the six runtime images: CTFd, MariaDB, Redis,
-Gitea, its seeder, and seeded LocalStack. Upstream images will be mirrored so
-private workloads do not need public registries. This stage creates repositories
-only; publishing and digest selection follow with compute provisioning.
+Gitea, its seeder, and seeded LocalStack. The operator's `publish-images` command
+mirrors upstream images and builds the two seeders, scans before pushing, and
+writes immutable digest inputs for platform and teams. Private workloads do not
+need public registries.
 
 Repositories are event-namespaced, AES-256 encrypted, scanned on push, and use
 immutable tags. They do not force-delete images or expire them automatically.

@@ -4,7 +4,7 @@ output "cluster_name" {
 }
 
 output "teams" {
-  description = "Operator identifiers only, not player endpoints; all ingress remains closed."
+  description = "Operator identifiers; player endpoints are in team_endpoints when access is enabled."
   value = {
     for id in var.team_ids : id => {
       service_name        = aws_ecs_service.team[id].name
@@ -14,4 +14,20 @@ output "teams" {
       log_group_name      = aws_cloudwatch_log_group.team[id].name
     }
   }
+}
+
+output "team_endpoints" {
+  description = "Assigned team hostname and HTTPS URLs; shared VPN access uses an honor system."
+  value = var.team_access == null ? {} : {
+    for id in var.team_ids : id => {
+      team_hostname = "${id}.${var.team_access.domain}"
+      gitea_url     = "https://gitea-${id}.${var.team_access.domain}"
+      aws_url       = "https://aws-${id}.${var.team_access.domain}"
+    }
+  }
+}
+
+output "deployment" {
+  description = "Identity guard for operator commands."
+  value       = { account_id = var.aws_account_id, region = var.aws_region, event_name = var.event_name }
 }

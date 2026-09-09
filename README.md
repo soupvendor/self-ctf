@@ -9,7 +9,8 @@ The current challenge, **Secrets All the Way Down**, follows a leaked credential
 through Docker image layers, a Gitea pipeline, and LocalStack Secrets Manager.
 
 > This repository is under active development. The local Docker Compose path is
-> functional and tested. The reusable AWS deployment is being built in stages.
+> functional and tested. The AWS configuration is ready for an initial rehearsal,
+> but has not yet been deployed and verified on AWS.
 
 ## Architecture
 
@@ -24,9 +25,12 @@ Docker Compose is the local and single-host path. Provider-specific deployments
 live under [`deploy/`](deploy/README.md) without forking the challenge
 definitions.
 
-The staged [AWS Terraform setup](deploy/aws/terraform/README.md) includes the
-network/image-registry foundation and stateful platform configuration. Per-team
-AWS deployment is still in progress.
+The [AWS Terraform setup](deploy/aws/terraform/README.md) includes the foundation,
+stateful platform, and per-team Fargate stacks with company-VPN-only HTTPS access.
+[Operator commands](deploy/aws/operator/README.md) publish images and manage teams.
+Team endpoint ownership is honor-system: resources are separate, but players on
+the VPN can visit another team's hostname. Public challenge source and writeups
+also rely on participants agreeing not to consult the answer key.
 
 ## Prerequisites
 
@@ -56,6 +60,9 @@ create profiles and then create or join a team.
 
 Do not run `mise run ci` against an already initialized platform; its bootstrap
 step is intended for a fresh CTFd instance.
+
+After pulling updates, rerun `mise run env:init` to add missing configuration
+keys without replacing existing event secrets.
 
 ## Everyday commands
 

@@ -40,6 +40,14 @@ run = "bash scripts/check-terraform.sh"
 description = "Unit-test platform startup, secret handling, and backup failure paths"
 run = "python3 -m unittest discover -s deploy/aws/platform/tests -v"
 
+[tasks."aws:operator"]
+description = "Publish AWS runtime images or create/reset/status/destroy a team"
+run = "python3 deploy/aws/operator/ctf_aws.py"
+
+[tasks."operator:check"]
+description = "Test AWS operator guards and command sequencing without AWS credentials"
+run = "python3 -m unittest discover -s deploy/aws/operator -p 'test_*.py' -v"
+
 [tasks."platform:test"]
 description = "Test the AWS Compose overlay and restore database/uploads into a fresh local stack"
 run = "python3 scripts/test-platform-restore.py"

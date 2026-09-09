@@ -5,6 +5,15 @@ set -euo pipefail
 : "${GITEA_INTERNAL_URL:?}" "${REPO_NAME:?}"
 : "${GITEA_ADMIN_NAME:?}" "${GITEA_ADMIN_PASSWORD:?}" "${GITEA_ADMIN_EMAIL:?}"
 : "${CI_USER:?}" "${CI_PASS:?}" "${FLAG_PIPELINE:?}" "${LOCALSTACK_PORT:?}"
+: "${LOCALSTACK_SCHEME:?}" "${LOCALSTACK_HOST_PREFIX?}"
+[[ "$LOCALSTACK_SCHEME" == "http" || "$LOCALSTACK_SCHEME" == "https" ]] || {
+  echo "!! LOCALSTACK_SCHEME must be http or https" >&2
+  exit 1
+}
+[[ "$LOCALSTACK_HOST_PREFIX" =~ ^[a-z0-9-]*$ ]] || {
+  echo "!! LOCALSTACK_HOST_PREFIX must be an empty or lowercase hostname prefix" >&2
+  exit 1
+}
 
 mkdir -p "${TMPDIR:-/tmp}"
 
@@ -70,8 +79,17 @@ workflow="$(<"$workflow_template")"
   echo "!! LocalStack port placeholder is missing" >&2
   exit 1
 }
+for placeholder in __LOCALSTACK_SCHEME__ __LOCALSTACK_HOST_PATTERN__; do
+  [[ "$workflow" == *"$placeholder"* ]] || {
+    echo "!! workflow endpoint placeholder is missing: $placeholder" >&2
+    exit 1
+  }
+done
 workflow="${workflow//__FLAG_PIPELINE__/$FLAG_PIPELINE}"
 workflow="${workflow//__LOCALSTACK_PORT__/$LOCALSTACK_PORT}"
+workflow="${workflow//__LOCALSTACK_SCHEME__/$LOCALSTACK_SCHEME}"
+host_pattern="${LOCALSTACK_HOST_PREFIX}{team}"
+workflow="${workflow//__LOCALSTACK_HOST_PATTERN__/$host_pattern}"
 printf '%s\n' "$workflow" >"${workflow_template%.template}"
 rm "$workflow_template"
 

@@ -11,6 +11,8 @@ env:
   AWS_ACCESS_KEY_ID: AKIAI0STAGING0DEPLOYER
   AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY01
   AWS_ENDPOINT_PORT: __LOCALSTACK_PORT__
+  AWS_ENDPOINT_SCHEME: __LOCALSTACK_SCHEME__
+  AWS_ENDPOINT_HOST_PATTERN: "__LOCALSTACK_HOST_PATTERN__"
 
 jobs:
   deploy:
@@ -27,5 +29,6 @@ jobs:
 
       - name: Push infra
         run: |
-          aws --endpoint-url "http://TEAM_HOST:$AWS_ENDPOINT_PORT" sts get-caller-identity
+          endpoint_host="${AWS_ENDPOINT_HOST_PATTERN/\{team\}/TEAM_HOST}"
+          aws --endpoint-url "$AWS_ENDPOINT_SCHEME://$endpoint_host:$AWS_ENDPOINT_PORT" sts get-caller-identity
           echo "applying terraform..."

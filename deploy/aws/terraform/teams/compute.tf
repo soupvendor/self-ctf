@@ -33,12 +33,14 @@ locals {
       mountPoints  = local.gitea_mounts
       dependsOn    = [{ containerName = "gitea", condition = "HEALTHY" }]
       environment = [for name, value in {
-        GITEA_INTERNAL_URL = "http://127.0.0.1:3000"
-        GITEA_ADMIN_NAME   = "gitea-admin"
-        GITEA_ADMIN_EMAIL  = "gitea-admin@internal.local"
-        CI_USER            = var.deploy_user
-        LOCALSTACK_PORT    = "4566"
-        REPO_NAME          = "internal-deploy"
+        GITEA_INTERNAL_URL     = "http://127.0.0.1:3000"
+        GITEA_ADMIN_NAME       = "gitea-admin"
+        GITEA_ADMIN_EMAIL      = "gitea-admin@internal.local"
+        CI_USER                = var.deploy_user
+        LOCALSTACK_PORT        = var.team_access == null ? "4566" : "443"
+        LOCALSTACK_SCHEME      = var.team_access == null ? "http" : "https"
+        LOCALSTACK_HOST_PREFIX = var.team_access == null ? "" : "aws-"
+        REPO_NAME              = "internal-deploy"
       } : { name = name, value = value }]
       secrets = [for field in [
         { name = "GITEA_ADMIN_PASSWORD", key = "GITEA_ADMIN_PASSWORD" },
@@ -101,6 +103,12 @@ resource "aws_ecs_task_definition" "team" {
     name        = name
     user        = "1000:1000"
     stopTimeout = 30
+    environment = [for item in container.environment : {
+      name = item.name
+      value = item.name == "GITEA__server__ROOT_URL" && var.team_access != null ? (
+        "https://gitea-${each.key}.${var.team_access.domain}/"
+      ) : item.value
+    }]
     linuxParameters = {
       initProcessEnabled = true
       capabilities       = { drop = ["ALL"] }
@@ -133,6 +141,15 @@ resource "aws_ecs_service" "team" {
   availability_zone_rebalancing      = "DISABLED"
   wait_for_steady_state              = true
   propagate_tags                     = "TASK_DEFINITION"
+  health_check_grace_period_seconds  = var.team_access == null ? 0 : 120
+  dynamic "load_balancer" {
+    for_each = { for key, endpoint in local.endpoints : key => endpoint if endpoint.team == each.key }
+    content {
+      target_group_arn = aws_lb_target_group.team[load_balancer.key].arn
+      container_name   = load_balancer.value.service
+      container_port   = load_balancer.value.port
+    }
+  }
   deployment_circuit_breaker {
     enable   = true
     rollback = false
@@ -142,6 +159,6 @@ resource "aws_ecs_service" "team" {
     security_groups  = [aws_security_group.team[each.key].id, data.aws_security_group.endpoint_clients.id]
     assign_public_ip = false
   }
-  depends_on = [aws_iam_role_policy.execution, data.aws_vpc_security_group_rule.endpoint_clients]
+  depends_on = [aws_iam_role_policy.execution, data.aws_vpc_security_group_rule.endpoint_clients, aws_lb_listener_rule.team]
   tags       = { Team = each.key }
 }

@@ -23,6 +23,7 @@ jobs:
           cache: true
       - run: mise run terraform:check
       - run: mise run platform:check
+      - run: mise run operator:check
 
   platform_restore:
     runs-on: ubuntu-latest

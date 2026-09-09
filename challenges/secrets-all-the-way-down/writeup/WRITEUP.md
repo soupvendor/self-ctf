@@ -6,7 +6,7 @@ order.
 
 `writeup/exploit.sh` performs all three stages end to end and is wired in as the
 challenge's healthcheck. It reads the assigned team hostname and the flags it
-verifies from `.env`; every service port and credential comes out of the
+verifies from `.env`; every service scheme, hostname pattern, port, and credential comes out of the
 challenge, so a broken handoff fails the build.
 
 ## Stage 1 — the layer that still has it
@@ -35,10 +35,12 @@ find /tmp/solve -type f -exec tar -xOf {} opt/deploy/creds.env \; 2>/dev/null
 `DEPLOY_TOKEN` is flag 1. `docker history --no-trunc` shows the `rm`, and `dive`
 browses layer A interactively — both reach the same place.
 
-**The handoff:** the same file carries `CI_PORT`, `CI_USER`, and `CI_PASS`.
-Combine the port with the hostname assigned to the team. Keeping the hostname
-outside the artifact lets every team receive the same download. That is the
-point of the hint "the file you recover is not just a flag".
+**The handoff:** the same file carries `CI_SCHEME`, `CI_HOST_PATTERN`, `CI_PORT`,
+`CI_USER`, and `CI_PASS`. Substitute the assigned team hostname for `{team}` in
+the pattern and combine it with the scheme and port. For example, the AWS
+pattern `gitea-{team}` turns `red.ctf.example.com` into
+`https://gitea-red.ctf.example.com:443`. Keeping the assigned hostname outside
+the artifact lets every team receive the same download.
 
 ## Stage 2 — the pipeline that says too much
 
@@ -47,7 +49,8 @@ private repository, `internal-deploy`, whose `.gitea/workflows/deploy.yml` holds
 
 - flag 2, echoed by the "Show deploy identity" step — a secret written into every
   build log
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_ENDPOINT_PORT` in the
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_SCHEME`,
+  `AWS_ENDPOINT_HOST_PATTERN`, and `AWS_ENDPOINT_PORT` in the
   workflow `env:` block, committed to version control because repo secrets were
   "not working"
 
@@ -59,13 +62,13 @@ stage 3.
 
 ## Stage 3 — a break-glass secret nobody scoped
 
-Combine the endpoint port from the workflow with the assigned team hostname and
-enumerate. The flag sits in Secrets Manager under a deliberately non-obvious
+Substitute the assigned hostname into the workflow's endpoint pattern, use its
+scheme and port, and enumerate. The flag sits in Secrets Manager under a deliberately non-obvious
 name among decoys, so listing has to happen before reading.
 
 ```bash
 export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
-EP="--endpoint-url http://<challenge-host>:4566"
+EP="--endpoint-url https://aws-red.ctf.example.com:443"
 
 aws $EP sts get-caller-identity
 aws $EP ssm get-parameter --name /platform/notes/ops-todo      # breadcrumb

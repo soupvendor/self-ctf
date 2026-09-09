@@ -1,7 +1,15 @@
 aws_region     = "us-east-1"
 aws_account_id = "123456789012"
 event_name     = "devops-ctf"
-team_ids       = ["red", "blue"]
+team_ids       = [] # Operator commands supply the managed roster as the last var-file.
+
+# Set null for closed backends without player access.
+team_access = {
+  domain          = "ctf.example.com"
+  hosted_zone_id  = "Z000000000000000000001"
+  certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000001"
+  vpn_ipv4_cidrs  = ["10.20.0.0/16"]
+}
 
 # Copy these outputs from the applied foundation configuration.
 vpc_id                            = "vpc-00000000000000001"

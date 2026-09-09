@@ -34,6 +34,29 @@ variable "team_ids" {
   }
 }
 
+variable "team_access" {
+  description = "Optional company-VPN HTTPS entry point. Team ownership is honor-system, not authenticated."
+  type = object({
+    domain          = string
+    hosted_zone_id  = string
+    certificate_arn = string
+    vpn_ipv4_cidrs  = set(string)
+  })
+  default  = null
+  nullable = true
+  validation {
+    condition = var.team_access == null ? true : (
+      can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", var.team_access.domain)) &&
+      length(var.team_access.domain) <= 200 &&
+      startswith(var.team_access.certificate_arn, "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/") &&
+      length(var.team_access.vpn_ipv4_cidrs) > 0 &&
+      alltrue([for cidr in var.team_access.vpn_ipv4_cidrs : can(cidrnetmask(cidr)) && !endswith(cidr, "/0")]) &&
+      length(var.team_ids) <= 30
+    )
+    error_message = "Use a DNS domain, an ACM certificate in this account/region, explicit IPv4 VPN CIDRs (no /0), and at most 30 teams (two ALB egress rules per team)."
+  }
+}
+
 variable "vpc_id" {
   description = "Existing foundation VPC."
   type        = string
