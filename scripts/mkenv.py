@@ -14,7 +14,7 @@ ENV = ROOT / ".env"
 EXAMPLE = ROOT / ".env.example"
 GENERATED = {
     "CTFD_SECRET_KEY": lambda: secrets.token_hex(32),
-    "CTFD_DB_PASSWORD": lambda: secrets.token_hex(16),
+    "CTFD_DB_PASSWORD": lambda: secrets.token_hex(32),
     "CTFD_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(24),
     "GITEA_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(24),
 }

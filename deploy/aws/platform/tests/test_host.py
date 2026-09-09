@@ -3,8 +3,10 @@ import contextlib
 import io
 import os
 import runpy
+import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,6 +61,48 @@ class HostTests(unittest.TestCase):
 
     def calls(self) -> str:
         return self.calls_file.read_text()
+
+    def initialize_event(self) -> dict[str, str]:
+        event = self.root / "event"
+        scripts = event / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        source = RUNTIME.parents[2]
+        shutil.copyfile(source / "scripts/mkenv.py", scripts / "mkenv.py")
+        shutil.copyfile(source / ".env.example", event / ".env.example")
+        subprocess.run(
+            [sys.executable, str(scripts / "mkenv.py")],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return dict(
+            line.split("=", 1)
+            for line in (event / ".env").read_text().splitlines()
+            if "=" in line and not line.startswith("#")
+        )
+
+    def test_generated_event_secret_starts_platform(self) -> None:
+        settings = self.initialize_event()
+        keys = ("CTFD_DB_PASSWORD", "CTFD_SECRET_KEY")
+        self.environment["MOCK_SECRET"] = "\n".join(key + "=" + settings[key] for key in keys)
+        result = self.script("start.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("up -d --wait", self.calls())
+        for key in keys:
+            self.assertRegex(settings[key], r"^[a-f0-9]{64}$")
+            self.assertNotIn(settings[key], result.stdout + result.stderr + self.calls())
+
+    def test_env_init_preserves_generated_credentials(self) -> None:
+        original = self.initialize_event()
+        self.assertEqual(self.initialize_event(), original)
+
+    def test_env_init_preserves_existing_short_database_password(self) -> None:
+        original = self.initialize_event()
+        env_file = self.root / "event/.env"
+        env_file.write_text(env_file.read_text().replace(original["CTFD_DB_PASSWORD"], "c" * 32))
+        before = env_file.read_bytes()
+        self.assertEqual(self.initialize_event()["CTFD_DB_PASSWORD"], "c" * 32)
+        self.assertEqual(env_file.read_bytes(), before)
 
     def test_start_pins_secret_and_keeps_credentials_private(self) -> None:
         result = self.script("start.sh")
