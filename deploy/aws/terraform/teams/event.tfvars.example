@@ -1,0 +1,33 @@
+aws_region     = "us-east-1"
+aws_account_id = "123456789012"
+event_name     = "devops-ctf"
+team_ids       = ["red", "blue"]
+
+# Copy these outputs from the applied foundation configuration.
+vpc_id                            = "vpc-00000000000000001"
+private_subnet_ids                = ["subnet-00000000000000001", "subnet-00000000000000002"]
+endpoint_client_security_group_id = "sg-00000000000000001"
+endpoint_ids = {
+  "ecr.api"    = "vpce-00000000000000001"
+  "ecr.dkr"    = "vpce-00000000000000002"
+  logs         = "vpce-00000000000000003"
+  secretsmanager = "vpce-00000000000000004"
+  s3           = "vpce-00000000000000005"
+}
+
+# Metadata only: do not paste secret values or platform credentials here.
+challenge_secret_arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:devops-ctf/challenge-000001"
+challenge_secret_version_id = "00000000-0000-0000-0000-000000000001"
+secret_kms_key_arn          = null
+deploy_user                 = "deploy-bot"
+
+# Replace every digest after publishing the existing Linux amd64 runtime images.
+images = {
+  gitea      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  gitea_seed = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
+
+task_size          = { cpu = 1024, memory = 4096 }
+log_retention_days = 7
+tags               = { Owner = "replace-me" }
