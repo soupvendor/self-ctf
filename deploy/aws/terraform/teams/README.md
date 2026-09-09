@@ -1,10 +1,37 @@
-# Disposable team backends
+# Disposable team stacks
 
 One private ECS Fargate service per team, separate from the stateful CTFd host.
-This is **backend-only**: no listener, DNS, VPN ingress, or player endpoint is
-created. Do not use it for a live event yet. Company VPN access, HTTPS, and
-enforced team authorization are the next stage; a shared VPN CIDR alone cannot
-distinguish teams. No additional VPN is planned.
+Optional `team_access` adds an internal HTTPS load balancer and private DNS.
+Players use the existing company VPN; no player helper or additional VPN is
+required. **Team endpoint ownership is honor-system**, not authenticated:
+players on the shared VPN can visit another team's endpoint. Separate task
+storage and restricted task networking contain damage to a backend, but do not
+stop deliberate cross-team access through the load balancer.
+
+This configuration still needs a two-team AWS rehearsal before a live event.
+
+## Player access
+
+Supply an existing private Route53 zone associated with this VPC, an ACM
+certificate in this account/region, a domain, and the VPN source IPv4 CIDRs
+actually seen by the ALB (account for company VPN NAT). For domain
+`ctf.example.com`, team `red` gets:
+
+- Assigned team hostname: `red.ctf.example.com` (an identifier, not a DNS record).
+- Gitea: `https://gitea-red.ctf.example.com`.
+- LocalStack: `https://aws-red.ctf.example.com`.
+
+A certificate for `*.ctf.example.com` covers both endpoints. Company DNS must
+resolve the private zone for VPN clients, and their browsers, Git, and AWS CLI
+must trust the certificate chain. Both endpoints use port 443. TLS terminates
+at the ALB; forwarding inside the private VPC is HTTP on ports 3000/4566,
+restricted to the ALB security group. Unknown hostnames receive 404; direct
+player access to task ports is not permitted.
+
+Omit `team_access` or set it to `null` for closed backends. With access enabled,
+the configuration caps teams at 30 to fit the default 60 ALB security-group
+egress rules. Check Fargate vCPU, subnet address, and load-balancer quotas before
+provisioning; the cap does not guarantee account capacity.
 
 ## Runtime
 
@@ -37,10 +64,9 @@ the platform or foundation backend key.
 
 Before applying:
 
-1. Mirror `gitea/gitea:1.27.1-rootless` and publish the existing `gitea-seed` and
-   `localstack-seeded` runtime builds to foundation ECR repositories. Supply
-   Linux amd64 digests; image publishing commands are a later stage. Never push
-   the player artifact or answer keys to runtime ECR.
+1. Use [operator image publishing](../../operator/README.md) to mirror Gitea and
+   publish the existing seeders to foundation ECR. Supply Linux amd64 digests.
+   Never push the player artifact or answer keys to runtime ECR.
 2. Create a separate Secrets Manager **JSON** secret through your approved
    secret-management workflow, containing exactly `GITEA_ADMIN_PASSWORD`,
    `DEPLOY_PASSWORD`, `FLAG_PIPELINE`, and `FLAG_CLOUD`. Values must match the
@@ -72,27 +98,22 @@ cp backend.hcl.example backend.hcl
 # Edit both copies; use a unique event backend key and standard AWS credentials.
 export AWS_PROFILE=your-company-profile
 terraform init -backend-config=backend.hcl
-terraform plan -var-file=event.tfvars -out=teams.tfplan
+terraform plan -var-file=event.tfvars -var-file=/absolute/path/images.tfvars.json -out=teams.tfplan
 # Review the plan before provisioning billable resources.
 terraform apply teams.tfplan
 terraform output
 ```
 
-`team_ids` are stable operator-assigned identifiers, not CTFd team registration
+Start with the example's empty `team_ids`; then use the
+[operator commands](../../operator/README.md) and their managed roster to add
+teams. `team_ids` are stable operator-assigned identifiers, not CTFd team registration
 automation. Adding an ID creates a stack; removing one destroys its service,
 task definition, role, security group, and logs. An empty set removes all teams
-but retains the cluster. Changing shared images or secret version replaces
+but retains the cluster and optional load balancer. Changing shared images or secret version replaces
 every team's task, so avoid it mid-event unless a full reset is intended.
 
-Until the operator command stage, use the AWS console or standard AWS CLI with
-the output cluster/service names. To reset **one disposable team**:
-
-```bash
-aws ecs update-service --cluster devops-ctf-teams --service red --force-new-deployment
-aws ecs wait services-stable --cluster devops-ctf-teams --services red
-```
-
-This does not touch CTFd scores, accounts, or other teams. Destroying this teams
+The operator's `reset` command replaces one task and verifies the new ECS
+deployment completed. It does not touch CTFd scores, accounts, or other teams. Destroying this teams
 state deletes its logs and ephemeral challenge data, not company networks,
 endpoints, ECR images, source secrets, or platform state.
 
@@ -105,9 +126,6 @@ three-flag solver through `ctf challenge healthcheck` against local Compose.
 Neither proves live Fargate startup, volume ownership, endpoint permissions,
 or cross-team isolation; those remain part of the AWS rehearsal.
 
-There is deliberately no `player_ipv4_cidrs` input here: nothing player-facing
-exists yet. The next access layer must allow the company VPN CIDR **and** enforce
-team authorization before forwarding to a team's backend. It must also update
-the artifact/solver transport contract for HTTPS. Current backend-only Gitea
-uses a loopback root URL and the existing internal ports 3000/4566; these are
-not advertised as usable player endpoints.
+The challenge artifact must be built with the HTTPS transport settings in the
+operator guide. Terraform configures the matching runtime handoff automatically
+when `team_access` is enabled. Local Compose retains its HTTP defaults.

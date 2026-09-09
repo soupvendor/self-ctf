@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
     environment:
       GITEA__database__DB_TYPE: sqlite3
-      GITEA__server__ROOT_URL: http://${CHALLENGE_HOST:?set CHALLENGE_HOST in .env}:${GITEA_PORT:?set GITEA_PORT in .env}/
+      GITEA__server__ROOT_URL: ${GITEA_SCHEME:?set GITEA_SCHEME in .env}://${GITEA_HOST_PREFIX?set GITEA_HOST_PREFIX in .env}${CHALLENGE_HOST:?set CHALLENGE_HOST in .env}:${GITEA_PORT:?set GITEA_PORT in .env}/
       GITEA__security__INSTALL_LOCK: "true"
       # Players get in with the account they recover, not one they create.
       GITEA__service__DISABLE_REGISTRATION: "true"
@@ -59,6 +59,8 @@ services:
       CI_PASS: ${DEPLOY_PASSWORD:?set DEPLOY_PASSWORD in .env}
       FLAG_PIPELINE: ${FLAG_PIPELINE:?set FLAG_PIPELINE in .env}
       LOCALSTACK_PORT: ${LOCALSTACK_PORT:?set LOCALSTACK_PORT in .env}
+      LOCALSTACK_SCHEME: ${LOCALSTACK_SCHEME:?set LOCALSTACK_SCHEME in .env}
+      LOCALSTACK_HOST_PREFIX: ${LOCALSTACK_HOST_PREFIX?set LOCALSTACK_HOST_PREFIX in .env}
       REPO_NAME: internal-deploy
     restart: "no"
     security_opt:

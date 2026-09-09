@@ -3,6 +3,11 @@ output "vpc_id" {
   value       = data.aws_vpc.selected.id
 }
 
+output "deployment" {
+  description = "Identity guard for operator commands."
+  value       = { account_id = var.aws_account_id, region = var.aws_region, event_name = var.event_name }
+}
+
 output "private_subnet_ids" {
   description = "Validated private subnets for future compute modules."
   value       = [for subnet in data.aws_subnet.selected : subnet.id]
