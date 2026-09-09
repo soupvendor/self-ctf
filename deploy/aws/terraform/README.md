@@ -9,16 +9,16 @@ stay provider-neutral; this directory owns only their AWS deployment.
 - [x] Portable challenge runtime images and environment contract
 - [x] Foundation configuration: existing network validation, endpoint access, ECR
 - [x] Platform configuration: CTFd EC2 host, encrypted EBS, and backup/restore
-- [ ] Per-team Fargate tasks, ephemeral data, and automatic seeding
-- [ ] Runtime secret injection and least-privilege execution roles; no team task role
-- [ ] Private DNS and team endpoint outputs
+- [x] Per-team Fargate tasks, ephemeral data, and automatic seeding (closed backends)
+- [x] Runtime secret injection and least-privilege execution roles; no team task role
+- [ ] Company-VPN access, enforced team authorization, HTTPS, private DNS, and endpoint outputs
 - [ ] Operator commands for image publishing and team create/reset/status/destroy
 - [ ] Two-team AWS rehearsal: isolation, solvers, reset, and platform recovery
 
-`foundation/` and [`platform/`](platform/README.md) are implemented, but have not
-been applied to AWS. The team task deployment is still pending, so this is not
-yet a complete AWS CTF. Platform state is separate from the foundation; future
-team state must remain separate from both.
+`foundation/`, [`platform/`](platform/README.md), and the closed
+[`teams/`](teams/README.md) backends are implemented, but have not been applied
+to AWS. Team access is still pending, so this is not yet a complete AWS CTF.
+Each configuration uses separate state; resetting a team must not affect CTFd.
 
 ## Foundation setup
 

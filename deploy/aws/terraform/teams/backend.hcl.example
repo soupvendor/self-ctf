@@ -1,0 +1,3 @@
+bucket = "replace-with-company-terraform-state-bucket"
+key    = "self-ctf/devops-ctf/teams.tfstate"
+region = "us-east-1"
