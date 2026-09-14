@@ -10,8 +10,8 @@ description: |
 
   The data-platform team is confident. Audit asked you to check their work
   before signing off. The access key they issued you is attached; it reads
-  their state bucket and nothing else. In the endpoint below, `{team}` is your
-  assigned team hostname.
+  their state bucket and nothing else. Use the connection address below. For
+  shared events displaying `{team}`, your organizer supplies that hostname.
 
   Two flags, 200 points together: the secret they say is gone, and the one
   they never noticed. Submit each as you find it.
@@ -24,7 +24,7 @@ image: null
 protocol: null
 host: null
 
-connection_info: "${TFSTATE_LOCALSTACK_SCHEME}://${TFSTATE_LOCALSTACK_HOST_PREFIX}{team}:${TFSTATE_LOCALSTACK_PORT}"
+connection_info: "${TFSTATE_LOCALSTACK_SCHEME}://${TFSTATE_LOCALSTACK_HOST_PREFIX}${CHALLENGE_HOST}:${TFSTATE_LOCALSTACK_PORT}"
 healthcheck: writeup/exploit.sh
 solution:
   path: writeup/WRITEUP.md

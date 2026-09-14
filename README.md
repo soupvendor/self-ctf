@@ -90,6 +90,13 @@ use `--team red` and provide distinct `GITEA_PORT`, `LOCALSTACK_PORT`, and
 `mise run down` also deletes the CTFd database, uploads, accounts, solves, and
 scores. Back up a real event before touching the platform volumes.
 
+CTFd displays the `CHALLENGE_HOST`, scheme, prefix, and port values rendered from
+`.env`. After changing them, run `mise run preview` to refresh the local challenge
+cards, or `mise run sync` to preserve the templates' visibility settings. This
+updates metadata; restart challenge services if their listening ports change.
+Shared AWS events explicitly set `CHALLENGE_HOST={team}` before rendering metadata;
+CTFd does not substitute a hostname for each logged-in team.
+
 ## Flags and secrets
 
 This is a public repository. Real event flags and deployment credentials belong

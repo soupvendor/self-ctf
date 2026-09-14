@@ -17,7 +17,10 @@ description: |
   `docker load -i internal-deployer.tar` to work with it as a normal image, or
   unpack the tar directly — either route is fine.
 
-  Substitute your organizer-assigned team hostname for `{team}` in each hostname
+  Configured challenge hostname: **`${CHALLENGE_HOST}`**. For shared events
+  displaying `{team}`, your organizer supplies that hostname.
+
+  Substitute this hostname for `{team}` in each hostname
   pattern you recover, using its accompanying scheme and port. The downloadable
   image is shared and does not contain your team's hostname.
 
@@ -31,7 +34,7 @@ host: null
 
 # Where the chain starts. The services for stages 2 and 3 are reached with
 # details the earlier stages hand over, so naming them here would skip the work.
-connection_info: Start with the attached file and your assigned team hostname.
+connection_info: "Start with the attached file. Challenge hostname: ${CHALLENGE_HOST}"
 healthcheck: writeup/exploit.sh
 solution:
   path: writeup/WRITEUP.md
