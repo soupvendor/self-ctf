@@ -11,6 +11,7 @@
 # Intended solve: list buckets, read the current state, then list object
 # versions and read the previous one.
 set -euo pipefail
+rm -f /tmp/self-ctf-seeded
 
 : "${FLAG_STATE_CURRENT:?}" "${FLAG_STATE_PRIOR:?}"
 
@@ -375,3 +376,5 @@ grep -Fq "$FLAG_STATE_PRIOR" "$old" || fail "prior state version is missing its 
 rm -f "$old"
 
 echo "[seed] done."
+
+touch /tmp/self-ctf-seeded

@@ -17,7 +17,7 @@ official Terraform and AWS CLIs; they do not provision credentials or networks.
    permissions, and AWS quotas before applying compute.
 4. Publish images below, then pass the resulting digest manifest as an additional
    `-var-file` when planning platform and teams. The same manifest works for both.
-   Apply teams initially with `team_ids = []` and the intended `team_access`.
+   Apply teams initially with `instance_ids = []` and the intended `team_access`.
 
 Keep separate checkouts/configuration for separate events. An existing foundation
 state needs a reviewed apply to add the new `deployment` output before using the
@@ -35,8 +35,8 @@ mise run aws:operator --account 123456789012 --region us-east-1 --event devops-c
   publish-images --tag rehearsal-1 --output deploy/aws/images.tfvars.json
 ```
 
-This mirrors four upstream images, builds the two allowlisted runtime contexts
-for Linux amd64, scans **all six before any push**, and writes ECR digest inputs.
+This mirrors four upstream images, builds the three allowlisted runtime contexts
+for Linux amd64, scans **all seven before any push**, and writes ECR digest inputs.
 The player artifact and answer keys are never published. ECR repositories must
 have immutable tags. Choose a new tag and manifest filename for each release;
 an existing manifest is not overwritten. If a push fails partway, images already
@@ -54,6 +54,9 @@ GITEA_PORT=443
 LOCALSTACK_SCHEME=https
 LOCALSTACK_HOST_PREFIX=aws-
 LOCALSTACK_PORT=443
+TFSTATE_LOCALSTACK_SCHEME=https
+TFSTATE_LOCALSTACK_HOST_PREFIX=tfstate-
+TFSTATE_LOCALSTACK_PORT=443
 ```
 
 The artifact contains `{team}` hostname placeholders, not a specific team's
@@ -64,42 +67,48 @@ guide to bootstrap CTFd and upload the artifact through the normal ctfcli flow.
 These settings are for building AWS artifacts, not for starting local Compose
 with two services bound to port 443; local development retains HTTP defaults.
 
-## Manage one team
+## Manage one challenge instance
+
+Commands now require both the team and the challenge name. The roster stores
+`instance_ids`, for example `red/secrets-all-the-way-down` and
+`red/nothing-is-ephemeral`. Create each separately. Status and reset target exactly
+one pair; create/destroy plans are rejected if they modify another pair, even
+when it belongs to the same team.
 
 Copy `roster.tfvars.json.example` to `deploy/aws/roster.tfvars.json` and keep that
-file as the authoritative team list. For an existing event, populate it with
+file as the authoritative instance list (`team/challenge` pairs). For an existing event, populate it with
 the currently deployed IDs first. Team IDs are assigned by the operator; CTFd
 self-registration does not automatically create infrastructure or map team IDs.
 
 ```bash
 mise run aws:operator --account 123456789012 --region us-east-1 --event devops-ctf \
-  create red --roster deploy/aws/roster.tfvars.json \
+  create red secrets-all-the-way-down --roster deploy/aws/roster.tfvars.json \
   --var-file deploy/aws/terraform/teams/event.tfvars \
   --var-file deploy/aws/images.tfvars.json
 
 mise run aws:operator --account 123456789012 --region us-east-1 --event devops-ctf \
-  status red
+  status red secrets-all-the-way-down
 
 mise run aws:operator --account 123456789012 --region us-east-1 --event devops-ctf \
-  reset red
+  reset red nothing-is-ephemeral
 
 mise run aws:operator --account 123456789012 --region us-east-1 --event devops-ctf \
-  destroy red --roster deploy/aws/roster.tfvars.json \
+  destroy red secrets-all-the-way-down --roster deploy/aws/roster.tfvars.json \
   --var-file deploy/aws/terraform/teams/event.tfvars \
   --var-file deploy/aws/images.tfvars.json
 ```
 
 `create` and `destroy` show a saved Terraform plan, reject unrelated resource
-changes, and require a typed event/team confirmation. The roster is supplied
-last, overriding any `team_ids` in other var-files. A local advisory lock prevents
+changes, and require a typed event/team/challenge confirmation. The roster is supplied
+last, overriding any `instance_ids` in other var-files. A local advisory lock prevents
 two commands sharing this roster from running together; S3 state locking and
 Terraform's stale-plan check protect concurrent state updates. Coordinate with
 other operators; do not hand-edit the roster during an operation.
 
-`reset` erases only that team's challenge data by replacing its task. It waits
+`reset` erases only the selected team/challenge's data by replacing its task. It waits
 for the **new** ECS deployment to complete and rejects task-definition drift.
 It leaves CTFd accounts, scores, and solves unchanged. `destroy` additionally
-deletes the team's logs, DNS records, and infrastructure. The shared ALB/cluster
+deletes that instance's logs, DNS records, and infrastructure. The shared ALB/cluster
 remain after the last team is removed. Neither command destroys platform state.
 
 Every command checks the requested account, region, and event against Terraform

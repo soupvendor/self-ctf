@@ -86,13 +86,27 @@ def team_id(value: str) -> str:
     return value
 
 
+def instance_id(value: str) -> str:
+    team, separator, challenge = value.partition("/")
+    if not separator or not re.fullmatch(r"[a-z][a-z0-9-]{0,39}", challenge):
+        raise ValueError("Invalid challenge instance ID")
+    team_id(team)
+    if not (ROOT / "challenges" / challenge / "compose.yaml").is_file():
+        raise ValueError("Unknown challenge")
+    return value
+
+
+def selected_instance(args: argparse.Namespace) -> str:
+    return instance_id(f"{args.team}/{args.challenge}")
+
+
 def roster(path: Path) -> set[str]:
     value = mapping(json.loads(path.read_text()))
-    if set(value) != {"team_ids"} or not isinstance(value["team_ids"], list):
-        raise ValueError("Roster must contain only a team_ids list")
-    teams = [team_id(text(item)) for item in value["team_ids"]]
+    if set(value) != {"instance_ids"} or not isinstance(value["instance_ids"], list):
+        raise ValueError("Roster must contain only an instance_ids list")
+    teams = [instance_id(text(item)) for item in value["instance_ids"]]
     if len(teams) != len(set(teams)):
-        raise ValueError("Duplicate team IDs in roster")
+        raise ValueError("Duplicate challenge instance IDs in roster")
     return set(teams)
 
 
@@ -146,7 +160,7 @@ def change_team(args: argparse.Namespace) -> None:
 def apply_team_change(args: argparse.Namespace) -> None:
     deployment = output("foundation", "deployment")
     identity(args.account, args.region, deployment, args.event)
-    team = team_id(args.team)
+    team = selected_instance(args)
     roster_path = Path(args.roster).resolve(strict=True)
     teams = roster(roster_path)
     if (team in teams) == (args.command == "create"):
@@ -156,7 +170,7 @@ def apply_team_change(args: argparse.Namespace) -> None:
             else "Team is absent from roster"
         )
     desired = teams | {team} if args.command == "create" else teams - {team}
-    rendered = json.dumps({"team_ids": sorted(desired)}, indent=2) + "\n"
+    rendered = json.dumps({"instance_ids": sorted(desired)}, indent=2) + "\n"
     original = roster_path.read_text()
     with tempfile.TemporaryDirectory(prefix="self-ctf-team-plan-") as directory:
         candidate = Path(directory) / "roster.tfvars.json"
@@ -189,7 +203,7 @@ def apply_team_change(args: argparse.Namespace) -> None:
 def service(args: argparse.Namespace) -> tuple[str, dict[str, object]]:
     deployment = output("teams", "deployment")
     identity(args.account, args.region, deployment, args.event)
-    team = team_id(args.team)
+    team = selected_instance(args)
     entry = mapping(output("teams", "teams")[team])
     definition = text(entry["task_definition_arn"])
     if not definition.startswith(f"arn:aws:ecs:{args.region}:{args.account}:task-definition/"):
@@ -214,16 +228,18 @@ def service(args: argparse.Namespace) -> tuple[str, dict[str, object]]:
 
 def team_status(args: argparse.Namespace) -> None:
     cluster, current = service(args)
+    endpoints = output("teams", "team_endpoints")
     print(
         json.dumps(
             {
                 "cluster": cluster,
                 "team": args.team,
+                "challenge": args.challenge,
                 "desired": current["desiredCount"],
                 "running": current["runningCount"],
                 "pending": current["pendingCount"],
                 "deployments": current["deployments"],
-                "endpoints": output("teams", "team_endpoints").get(args.team),
+                "endpoints": endpoints[selected_instance(args)] if endpoints else None,
             },
             indent=2,
         )
@@ -234,7 +250,8 @@ def reset_team(args: argparse.Namespace) -> None:
     cluster, current = service(args)
     if current["desiredCount"] != 1 or len(records(current["deployments"])) != 1:
         raise ValueError("Reset requires a singleton service without a deployment in progress")
-    if input(f"Type '{args.team}' to erase this team's challenge data: ") != args.team:
+    target = selected_instance(args)
+    if input(f"Type '{target}' to erase this challenge instance's data: ") != target:
         raise ValueError("Cancelled")
     updated = aws(
         args.region,
@@ -275,16 +292,14 @@ def reset_team(args: argparse.Namespace) -> None:
         or finished[0]["rolloutState"] != "COMPLETED"
     ):
         raise ValueError("Requested reset did not complete successfully")
-    print(f"Reset complete: {args.team}. CTFd progress was not changed.")
+    print(f"Reset complete: {target}. CTFd progress was not changed.")
 
 
 def runtime_images() -> dict[str, tuple[str, Path | None, Path | None]]:
-    """Mirrored images carry a pinned source; built ones carry a context and a Dockerfile."""
     images: dict[str, tuple[str, Path | None, Path | None]] = {}
-    for filename, names in [
-        (ROOT / "compose.yaml", {"ctfd": "ctfd", "db": "mariadb", "cache": "redis"}),
-        (ROOT / "challenges/secrets-all-the-way-down/compose.yaml", {"gitea": "gitea"}),
-    ]:
+    files = [ROOT / "compose.yaml", *sorted((ROOT / "challenges").glob("*/compose.yaml"))]
+    platform_names = {"ctfd": "ctfd", "db": "mariadb", "cache": "redis"}
+    for filename in files:
         config = mapping(
             json.loads(
                 run(
@@ -303,17 +318,30 @@ def runtime_images() -> dict[str, tuple[str, Path | None, Path | None]]:
                 )
             )
         )
-        services = mapping(config["services"])
-        for name, repository in names.items():
-            source = text(mapping(services[name])["image"])
-            if ":" not in source or source.endswith(":latest") or "$" in source:
-                raise ValueError("Runtime image source must be pinned")
-            images[repository] = (source, None, None)
-    gitea_seed = ROOT / "challenges/secrets-all-the-way-down/runtime/gitea-seed"
-    images["gitea-seed"] = ("", gitea_seed, gitea_seed / "Dockerfile")
-    # Built from the repo root so every challenge's seed/localstack/ can enter the
-    # image; the root .dockerignore is the allowlist that keeps everything else out.
-    images["localstack-seeded"] = ("", ROOT, ROOT / "runtime/localstack/Dockerfile")
+        for name, value in mapping(config["services"]).items():
+            container = mapping(value)
+            if container.get("x-self-ctf-local-only") is True:
+                continue
+            repository = (
+                platform_names[name]
+                if filename == files[0]
+                else text(container["x-self-ctf-repository"])
+            )
+            if repository in images:
+                raise ValueError("Runtime repositories must belong to exactly one challenge")
+            if "build" in container:
+                build = mapping(container["build"])
+                context = Path(text(build["context"]))
+                images[repository] = (
+                    "",
+                    context,
+                    context / text(build.get("dockerfile", "Dockerfile")),
+                )
+            else:
+                source = text(container["image"])
+                if ":" not in source or source.endswith(":latest") or "$" in source:
+                    raise ValueError("Runtime image source must be pinned")
+                images[repository] = (source, None, None)
     return images
 
 
@@ -392,7 +420,11 @@ def publish_images(args: argparse.Namespace) -> None:
                 r"sha256:[a-f0-9]{64}", text(details[0]["imageDigest"])
             ):
                 raise ValueError("ECR did not return one immutable digest")
-            key = {"gitea-seed": "gitea_seed", "localstack-seeded": "localstack"}.get(name, name)
+            key = {
+                "gitea-seed": "gitea_seed",
+                "localstack-seeded": "localstack",
+                "tfstate-localstack-seeded": "tfstate_localstack",
+            }.get(name, name)
             manifest[key] = target.rsplit(":", 1)[0] + "@" + text(details[0]["imageDigest"])
         with destination.open("x") as handle:
             json.dump({"images": manifest}, handle, indent=2)
@@ -411,6 +443,7 @@ def main() -> None:
     for name in ["create", "destroy", "reset", "status"]:
         command = commands.add_parser(name)
         command.add_argument("team")
+        command.add_argument("challenge")
         if name in {"create", "destroy"}:
             command.add_argument("--roster", required=True)
             command.add_argument("--var-file", action="append", required=True)

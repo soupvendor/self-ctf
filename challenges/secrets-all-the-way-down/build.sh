@@ -11,6 +11,7 @@ cd "$(dirname "$0")"
 }
 
 mkdir -p dist
-docker build -q -f artifact.Dockerfile -t internal-deployer:challenge . >/dev/null
-docker save internal-deployer:challenge -o dist/internal-deployer.tar
+image="${ARTIFACT_IMAGE:-internal-deployer:challenge}"
+docker build -q -f artifact.Dockerfile -t "$image" . >/dev/null
+docker save "$image" -o dist/internal-deployer.tar
 echo "    dist/internal-deployer.tar ($(du -h dist/internal-deployer.tar | cut -f1))"

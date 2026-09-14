@@ -1,7 +1,7 @@
 aws_region     = "us-east-1"
 aws_account_id = "123456789012"
 event_name     = "devops-ctf"
-team_ids       = [] # Operator commands supply the managed roster as the last var-file.
+instance_ids   = [] # Operator supplies explicit team/challenge pairs from the roster.
 
 # Set null for closed backends without player access.
 team_access = {
@@ -24,9 +24,18 @@ endpoint_ids = {
 }
 
 # Metadata only: do not paste secret values or platform credentials here.
-challenge_secret_arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:devops-ctf/challenge-000001"
-challenge_secret_version_id = "00000000-0000-0000-0000-000000000001"
-secret_kms_key_arn          = null
+challenge_secrets = {
+  secrets-all-the-way-down = {
+    arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:devops-ctf/pipeline-000001"
+    version_id = "00000000-0000-0000-0000-000000000001"
+    kms_key_arn = null
+  }
+  nothing-is-ephemeral = {
+    arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:devops-ctf/tfstate-000002"
+    version_id = "00000000-0000-0000-0000-000000000002"
+    kms_key_arn = null
+  }
+}
 deploy_user                 = "deploy-bot"
 
 # Replace every digest after publishing the existing Linux amd64 runtime images.
@@ -34,6 +43,7 @@ images = {
   gitea      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   gitea_seed = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  tfstate_localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/devops-ctf/tfstate-localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }
 
 task_size          = { cpu = 1024, memory = 4096 }

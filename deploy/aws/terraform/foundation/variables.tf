@@ -69,7 +69,7 @@ variable "create_missing_endpoints" {
 variable "ecr_repository_names" {
   description = "Runtime image repositories to create under the event namespace. Never publish player artifacts here."
   type        = set(string)
-  default     = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded"]
+  default     = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded", "tfstate-localstack-seeded"]
   nullable    = false
 
   validation {

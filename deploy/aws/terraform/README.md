@@ -1,7 +1,7 @@
 # AWS Terraform
 
 An existing VPC and private subnets, one stateful CTFd host on EC2, and one
-disposable ECS Fargate stack per team. Challenge definitions and runtime images
+disposable ECS Fargate service per team/challenge pair. Challenge definitions and runtime images
 stay provider-neutral; this directory owns only their AWS deployment.
 
 ## Stages
@@ -94,9 +94,9 @@ See [AWS's ECR endpoint requirements](https://docs.aws.amazon.com/AmazonECR/late
 
 ## Images and lifecycle
 
-`ecr_repository_names` defaults to the six runtime images: CTFd, MariaDB, Redis,
-Gitea, its seeder, and seeded LocalStack. The operator's `publish-images` command
-mirrors upstream images and builds the two seeders, scans before pushing, and
+`ecr_repository_names` defaults to seven runtime images: CTFd, MariaDB, Redis,
+Gitea, its seeder, and two independently seeded LocalStack images. The operator's `publish-images` command
+mirrors upstream images and builds the three seeded runtime images, scans before pushing, and
 writes immutable digest inputs for platform and teams. Private workloads do not
 need public registries.
 

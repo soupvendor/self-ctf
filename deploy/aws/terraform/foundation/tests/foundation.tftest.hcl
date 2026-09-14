@@ -105,7 +105,7 @@ run "create_foundation" {
 
   assert {
     condition = (
-      length(aws_ecr_repository.runtime) == 6 &&
+      length(aws_ecr_repository.runtime) == 7 &&
       alltrue([for name, repository in aws_ecr_repository.runtime :
         repository.name == "test-event/${name}" &&
         repository.image_tag_mutability == "IMMUTABLE" &&
@@ -113,7 +113,7 @@ run "create_foundation" {
         one(repository.encryption_configuration).encryption_type == "AES256" &&
         one(repository.image_scanning_configuration).scan_on_push
       ]) &&
-      length(output.ecr_repositories) == 6 &&
+      length(output.ecr_repositories) == 7 &&
       length(output.endpoint_ids) == 5
     )
     error_message = "Runtime repositories must be event-scoped, encrypted, scanned, immutable, and protected from forced deletion."

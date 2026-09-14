@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PLANTED VULNERABILITY: the deploy identity can enumerate the break-glass flag.
 set -euo pipefail
+rm -f /tmp/self-ctf-seeded
 
 : "${FLAG_CLOUD:?}"
 
@@ -34,3 +35,5 @@ echo "terraform state placeholder" \
   | awslocal s3 cp - s3://internal-terraform-state/staging.tfstate >/dev/null
 
 echo "[seed] done."
+
+touch /tmp/self-ctf-seeded

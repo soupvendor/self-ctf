@@ -24,13 +24,13 @@ variable "event_name" {
   }
 }
 
-variable "team_ids" {
-  description = "Stable operator-assigned team IDs, not player-controlled display names; removing an ID destroys its stack."
+variable "instance_ids" {
+  description = "Explicit team/challenge pairs; removing a pair destroys only that challenge instance."
   type        = set(string)
   nullable    = false
   validation {
-    condition     = alltrue([for id in var.team_ids : can(regex("^[a-z][a-z0-9-]{0,15}$", id))])
-    error_message = "Team IDs must be 1–16 lowercase letters, digits, or hyphens, starting with a letter."
+    condition     = alltrue([for id in var.instance_ids : can(regex("^[a-z][a-z0-9-]{0,15}/(secrets-all-the-way-down|nothing-is-ephemeral)$", id))])
+    error_message = "Use a valid team ID and catalog challenge separated by /."
   }
 }
 
@@ -50,10 +50,9 @@ variable "team_access" {
       length(var.team_access.domain) <= 200 &&
       startswith(var.team_access.certificate_arn, "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/") &&
       length(var.team_access.vpn_ipv4_cidrs) > 0 &&
-      alltrue([for cidr in var.team_access.vpn_ipv4_cidrs : can(cidrnetmask(cidr)) && !endswith(cidr, "/0")]) &&
-      length(var.team_ids) <= 30
+      alltrue([for cidr in var.team_access.vpn_ipv4_cidrs : can(cidrnetmask(cidr)) && !endswith(cidr, "/0")])
     )
-    error_message = "Use a DNS domain, an ACM certificate in this account/region, explicit IPv4 VPN CIDRs (no /0), and at most 30 teams (two ALB egress rules per team)."
+    error_message = "Use a DNS domain, an ACM certificate in this account/region, explicit IPv4 VPN CIDRs (no /0), for VPN ingress."
   }
 }
 
@@ -92,40 +91,27 @@ variable "endpoint_ids" {
   }
 }
 
-variable "challenge_secret_arn" {
-  description = "Existing challenge-only JSON secret; never the platform secret or a copy of .env."
-  type        = string
+variable "challenge_secrets" {
+  description = "One distinct challenge-only secret per bundle, with immutable versions; payloads never enter Terraform."
+  type        = map(object({ arn = string, version_id = string, kms_key_arn = optional(string) }))
   nullable    = false
   validation {
-    condition     = can(regex("^arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", var.challenge_secret_arn))
-    error_message = "Supply a complete, unqualified Secrets Manager ARN from the selected account and region."
-  }
-}
-
-variable "challenge_secret_version_id" {
-  description = "Immutable version shared by all teams; retain this version for the entire event."
-  type        = string
-  nullable    = false
-  validation {
-    condition     = can(regex("^[A-Za-z0-9-]{32,64}$", var.challenge_secret_version_id))
-    error_message = "Supply the 32–64 character secret version ID, not a moving version stage."
-  }
-}
-
-variable "secret_kms_key_arn" {
-  description = "Customer-managed key encrypting the challenge secret, if used."
-  type        = string
-  default     = null
-  nullable    = true
-  validation {
-    condition     = var.secret_kms_key_arn == null ? true : can(regex("^arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/[a-zA-Z0-9-]+$", var.secret_kms_key_arn))
-    error_message = "Supply a KMS key ARN from the selected account and region."
+    condition = (
+      toset(keys(var.challenge_secrets)) == toset(["secrets-all-the-way-down", "nothing-is-ephemeral"]) &&
+      length(distinct([for secret in var.challenge_secrets : secret.arn])) == length(var.challenge_secrets) &&
+      alltrue([for secret in var.challenge_secrets :
+        can(regex("^arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", secret.arn)) &&
+        can(regex("^[A-Za-z0-9-]{32,64}$", secret.version_id)) &&
+        (secret.kms_key_arn == null ? true : can(regex("^arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/[a-zA-Z0-9-]+$", secret.kms_key_arn)))
+      ])
+    )
+    error_message = "Supply distinct unqualified secret ARNs and pinned version IDs for both catalog challenges, in this account/region."
   }
 }
 
 variable "images" {
   description = "Linux amd64 runtime images mirrored to ECR and pinned by digest; never the player artifact."
-  type        = object({ gitea = string, gitea_seed = string, localstack = string })
+  type        = object({ gitea = string, gitea_seed = string, localstack = string, tfstate_localstack = string })
   nullable    = false
   validation {
     condition     = alltrue([for uri in values(var.images) : can(regex("^${var.aws_account_id}\\.dkr\\.ecr\\.${var.aws_region}\\.amazonaws\\.com/[a-z0-9/_-]+@sha256:[a-f0-9]{64}$", uri))])

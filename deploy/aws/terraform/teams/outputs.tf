@@ -6,7 +6,7 @@ output "cluster_name" {
 output "teams" {
   description = "Operator identifiers; player endpoints are in team_endpoints when access is enabled."
   value = {
-    for id in var.team_ids : id => {
+    for id, instance in local.instances : id => {
       service_name        = aws_ecs_service.team[id].name
       task_definition_arn = aws_ecs_task_definition.team[id].arn
       security_group_id   = aws_security_group.team[id].id
@@ -19,10 +19,9 @@ output "teams" {
 output "team_endpoints" {
   description = "Assigned team hostname and HTTPS URLs; shared VPN access uses an honor system."
   value = var.team_access == null ? {} : {
-    for id in var.team_ids : id => {
-      team_hostname = "${id}.${var.team_access.domain}"
-      gitea_url     = "https://gitea-${id}.${var.team_access.domain}"
-      aws_url       = "https://aws-${id}.${var.team_access.domain}"
+    for id, instance in local.instances : id => {
+      team_hostname = "${instance.team}.${var.team_access.domain}"
+      urls          = { for key, endpoint in local.endpoints : endpoint.service => "https://${endpoint.hostname}" if endpoint.instance == id }
     }
   }
 }

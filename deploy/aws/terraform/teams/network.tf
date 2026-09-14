@@ -112,16 +112,16 @@ data "aws_vpc_security_group_rule" "endpoint_clients" {
 }
 
 resource "aws_security_group" "team" {
-  for_each    = var.team_ids
-  name_prefix = "${var.event_name}-${each.key}-team-"
+  for_each    = local.instances
+  name_prefix = "${var.event_name}-${each.value.name}-"
   description = "Team backend; ingress only from the optional company-VPN ALB."
   vpc_id      = data.aws_vpc.selected.id
-  ingress = var.team_access == null ? [] : [for port in [3000, 4566] : {
+  ingress = var.team_access == null ? [] : [for port in distinct([for endpoint in local.catalog[each.value.challenge].endpoints : endpoint.port]) : {
     description     = "HTTP from the TLS-terminating team ALB"
     from_port       = port, to_port = port, protocol = "tcp"
     security_groups = [aws_security_group.alb[0].id]
     cidr_blocks     = [], ipv6_cidr_blocks = [], prefix_list_ids = [], self = false
   }]
   egress = []
-  tags   = { Team = each.key }
+  tags   = { Team = each.value.team, Challenge = each.value.challenge }
 }

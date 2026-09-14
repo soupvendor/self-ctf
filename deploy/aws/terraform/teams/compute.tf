@@ -46,7 +46,7 @@ locals {
         { name = "GITEA_ADMIN_PASSWORD", key = "GITEA_ADMIN_PASSWORD" },
         { name = "CI_PASS", key = "DEPLOY_PASSWORD" },
         { name = "FLAG_PIPELINE", key = "FLAG_PIPELINE" }
-      ] : { name = field.name, valueFrom = "${var.challenge_secret_arn}:${field.key}::${var.challenge_secret_version_id}" }]
+      ] : { name = field.name, valueFrom = "${var.challenge_secrets["secrets-all-the-way-down"].arn}:${field.key}::${var.challenge_secrets["secrets-all-the-way-down"].version_id}" }]
     }
     localstack = {
       image        = var.images.localstack
@@ -58,9 +58,9 @@ locals {
         { name = "SERVICES", value = "secretsmanager,ssm,s3,sts,iam" },
         { name = "DEBUG", value = "0" }
       ]
-      secrets = [{ name = "FLAG_CLOUD", valueFrom = "${var.challenge_secret_arn}:FLAG_CLOUD::${var.challenge_secret_version_id}" }]
+      secrets = [{ name = "FLAG_CLOUD", valueFrom = "${var.challenge_secrets["secrets-all-the-way-down"].arn}:FLAG_CLOUD::${var.challenge_secrets["secrets-all-the-way-down"].version_id}" }]
       healthCheck = {
-        command     = ["CMD-SHELL", "awslocal secretsmanager describe-secret --secret-id platform/break-glass/root-recovery >/dev/null 2>&1"]
+        command     = ["CMD-SHELL", "test -f /tmp/self-ctf-seeded && awslocal secretsmanager describe-secret --secret-id platform/break-glass/root-recovery >/dev/null 2>&1"]
         interval    = 10
         timeout     = 10
         retries     = 10
@@ -79,15 +79,15 @@ resource "aws_ecs_cluster" "teams" {
 }
 
 resource "aws_cloudwatch_log_group" "team" {
-  for_each          = var.team_ids
+  for_each          = local.instances
   name              = "/self-ctf/${var.event_name}/teams/${each.key}"
   retention_in_days = var.log_retention_days
-  tags              = { Team = each.key }
+  tags              = { Team = each.value.team, Challenge = each.value.challenge }
 }
 
 resource "aws_ecs_task_definition" "team" {
-  for_each                 = var.team_ids
-  family                   = "${var.event_name}-${each.key}"
+  for_each                 = local.instances
+  family                   = "${var.event_name}-${each.value.name}"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.task_size.cpu)
@@ -97,16 +97,18 @@ resource "aws_ecs_task_definition" "team" {
     operating_system_family = "LINUX"
     cpu_architecture        = "X86_64"
   }
-  volume { name = "gitea-data" }
-  volume { name = "gitea-config" }
-  container_definitions = jsonencode([for name, container in local.containers : merge(container, {
+  dynamic "volume" {
+    for_each = local.catalog[each.value.challenge].volumes
+    content { name = volume.value }
+  }
+  container_definitions = jsonencode([for name, container in local.catalog[each.value.challenge].containers : merge(container, {
     name        = name
     user        = "1000:1000"
     stopTimeout = 30
     environment = [for item in container.environment : {
       name = item.name
       value = item.name == "GITEA__server__ROOT_URL" && var.team_access != null ? (
-        "https://gitea-${each.key}.${var.team_access.domain}/"
+        "https://gitea-${each.value.team}.${var.team_access.domain}/"
       ) : item.value
     }]
     linuxParameters = {
@@ -124,12 +126,12 @@ resource "aws_ecs_task_definition" "team" {
       }
     }
   })])
-  tags = { Team = each.key }
+  tags = { Team = each.value.team, Challenge = each.value.challenge }
 }
 
 resource "aws_ecs_service" "team" {
-  for_each                           = var.team_ids
-  name                               = each.key
+  for_each                           = local.instances
+  name                               = each.value.name
   cluster                            = aws_ecs_cluster.teams.id
   task_definition                    = aws_ecs_task_definition.team[each.key].arn
   desired_count                      = 1
@@ -143,7 +145,7 @@ resource "aws_ecs_service" "team" {
   propagate_tags                     = "TASK_DEFINITION"
   health_check_grace_period_seconds  = var.team_access == null ? 0 : 120
   dynamic "load_balancer" {
-    for_each = { for key, endpoint in local.endpoints : key => endpoint if endpoint.team == each.key }
+    for_each = { for key, endpoint in local.endpoints : key => endpoint if endpoint.instance == each.key }
     content {
       target_group_arn = aws_lb_target_group.team[load_balancer.key].arn
       container_name   = load_balancer.value.service
@@ -160,5 +162,5 @@ resource "aws_ecs_service" "team" {
     assign_public_ip = false
   }
   depends_on = [aws_iam_role_policy.execution, data.aws_vpc_security_group_rule.endpoint_clients, aws_lb_listener_rule.team]
-  tags       = { Team = each.key }
+  tags       = { Team = each.value.team, Challenge = each.value.challenge }
 }

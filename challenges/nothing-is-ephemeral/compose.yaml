@@ -1,0 +1,60 @@
+services:
+  ingress:
+    x-self-ctf-local-only: true
+    image: self-ctf/nothing-is-ephemeral-ingress:local
+    build:
+      context: ./runtime/ingress
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=1770,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [default, ingress]
+    ports:
+      - "127.0.0.1:${TFSTATE_LOCALSTACK_PORT:?set endpoint port in .env}:4566"
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          pids: 100
+  localstack:
+    x-self-ctf-repository: tfstate-localstack-seeded
+    image: ${TFSTATE_LOCALSTACK_IMAGE:-self-ctf/tfstate-localstack-seeded:local}
+    build:
+      context: ./seed/localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: s3,sts
+      DEBUG: "0"
+      FLAG_STATE_CURRENT: ${FLAG_STATE_CURRENT:?set FLAG_STATE_CURRENT in .env}
+      FLAG_STATE_PRIOR: ${FLAG_STATE_PRIOR:?set FLAG_STATE_PRIOR in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/self-ctf-seeded && awslocal s3api list-object-versions --bucket data-platform-tfstate --prefix env/prod/terraform.tfstate --query 'length(Versions)' --output text | grep -qx 2"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          pids: 300
+
+networks:
+  default:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  ingress:

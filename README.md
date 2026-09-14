@@ -19,7 +19,7 @@ they scrubbed it.
 - **Platform stack:** CTFd, MariaDB, and Redis. It is stateful and holds player
   accounts, team progress, and scores.
 - **Challenge stack:** vulnerable services and their seeders. It is disposable
-  and must run once per team in a hosted event.
+  and runs independently for every team/challenge pair in a hosted event.
 - **Event configuration:** flags are generated once per event and shared by all
   team stacks because CTFd stores one accepted value per flag.
 
@@ -36,7 +36,7 @@ also rely on participants agreeing not to consult the answer key.
 
 ## Prerequisites
 
-- Docker Engine with Docker Compose
+- Docker Engine 28 or newer with Docker Compose (isolated bridge gateway support)
 - [mise](https://mise.jdx.dev/)
 
 `mise` installs the remaining project tools, including Python, ctfcli, the AWS
@@ -71,14 +71,22 @@ keys without replacing existing event secrets.
 | Command | Purpose |
 |---|---|
 | `mise run up` | Start the CTFd platform |
-| `mise run challenges:up` | Build and start one local challenge stack |
+| `mise run challenges:up` | Build and start independent local challenge bundles |
 | `mise run build` | Rebuild player-facing challenge artifacts |
 | `mise run sync` | Install new challenges or sync metadata to CTFd |
 | `mise run healthcheck` | Solve every challenge end to end |
 | `mise run check` | Run all static, formatting, and secret checks |
-| `mise run challenges:logs` | Follow challenge service logs |
+| `mise run challenges:logs` | Read recent challenge service logs |
+| `mise run challenges:reset nothing-is-ephemeral` | Reset only that local challenge |
+| `mise run challenges:test` | Verify two teams, both solvers, isolation, and independent reset |
 
 `mise run challenges:down` deletes only the disposable challenge state.
+Each challenge runs in its own Compose project, with a private backend network
+and a local Nginx ingress proxy bound to loopback. Gitea uses port 3000, the
+pipeline LocalStack uses 4566, and the state challenge uses 4567 by default.
+Pass a challenge name to operate on only that bundle. For multiple local teams,
+use `--team red` and provide distinct `GITEA_PORT`, `LOCALSTACK_PORT`, and
+`TFSTATE_LOCALSTACK_PORT` values, including when rendering artifacts/metadata.
 `mise run down` also deletes the CTFd database, uploads, accounts, solves, and
 scores. Back up a real event before touching the platform volumes.
 

@@ -36,7 +36,7 @@ class OperatorTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.directory = Path(directory.name)
         self.roster = self.directory / "roster.tfvars.json"
-        self.roster.write_text('{"team_ids": []}')
+        self.roster.write_text('{"instance_ids": []}')
         self.variables = self.directory / "event.tfvars"
         self.variables.touch()
         self.args = argparse.Namespace(
@@ -45,13 +45,14 @@ class OperatorTests(unittest.TestCase):
             event="test-event",
             command="create",
             team="red",
+            challenge="secrets-all-the-way-down",
             roster=str(self.roster),
             var_file=[str(self.variables)],
             tag="test-release",
             output=str(self.directory / "images.tfvars.json"),
         )
         self.service = {
-            "serviceName": "red",
+            "serviceName": "red/secrets-all-the-way-down",
             "status": "ACTIVE",
             "taskDefinition": DEFINITION,
             "desiredCount": 1,
@@ -78,11 +79,11 @@ class OperatorTests(unittest.TestCase):
     def test_single_team_plan_accepts_initial_shared_resources(self) -> None:
         operator.validate_plan(
             plan(
-                change('aws_ecs_service.team["red"]', "create"),
-                change('aws_route53_record.team["red/gitea"]', "create"),
+                change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "create"),
+                change('aws_route53_record.team["red/secrets-all-the-way-down/gitea"]', "create"),
                 change("aws_lb.teams[0]", "create"),
             ),
-            "red",
+            "red/secrets-all-the-way-down",
             "create",
             DEPLOYMENT,
         )
@@ -90,23 +91,31 @@ class OperatorTests(unittest.TestCase):
     def test_single_team_destroy_plan(self) -> None:
         operator.validate_plan(
             plan(
-                change('aws_ecs_service.team["red"]', "delete"),
-                change('aws_route53_record.team["red/localstack"]', "delete"),
+                change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "delete"),
+                change(
+                    'aws_route53_record.team["red/secrets-all-the-way-down/localstack"]', "delete"
+                ),
             ),
-            "red",
+            "red/secrets-all-the-way-down",
             "destroy",
             DEPLOYMENT,
         )
 
     def test_plan_rejects_other_team_and_shared_destruction(self) -> None:
-        for address in ['aws_ecs_service.team["blue"]', "aws_lb.teams[0]", "aws_instance.platform"]:
+        for address in [
+            'aws_ecs_service.team["red/nothing-is-ephemeral"]',
+            'aws_route53_record.team["red/nothing-is-ephemeral/localstack"]',
+            'aws_ecs_service.team["blue/secrets-all-the-way-down"]',
+            "aws_lb.teams[0]",
+            "aws_instance.platform",
+        ]:
             with self.subTest(address=address), self.assertRaisesRegex(ValueError, "unrelated"):
                 operator.validate_plan(
                     plan(
-                        change('aws_ecs_service.team["red"]', "delete"),
+                        change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "delete"),
                         change(address, "delete"),
                     ),
-                    "red",
+                    "red/secrets-all-the-way-down",
                     "destroy",
                     DEPLOYMENT,
                 )
@@ -114,15 +123,18 @@ class OperatorTests(unittest.TestCase):
     def test_plan_rejects_updates_during_create(self) -> None:
         with self.assertRaisesRegex(ValueError, "unrelated"):
             operator.validate_plan(
-                plan(change('aws_ecs_service.team["red"]', "update")), "red", "create", DEPLOYMENT
+                plan(change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "update")),
+                "red/secrets-all-the-way-down",
+                "create",
+                DEPLOYMENT,
             )
 
     def test_plan_rejects_missing_service_change(self) -> None:
         with self.assertRaisesRegex(ValueError, "requested team"):
-            operator.validate_plan(plan(), "red", "create", DEPLOYMENT)
+            operator.validate_plan(plan(), "red/secrets-all-the-way-down", "create", DEPLOYMENT)
 
     def test_plan_rejects_wrong_prior_state(self) -> None:
-        candidate = plan(change('aws_ecs_service.team["red"]', "delete"))
+        candidate = plan(change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "delete"))
         candidate["prior_state"] = {
             "values": {
                 "outputs": {"deployment": {"value": {**DEPLOYMENT, "event_name": "other-event"}}},
@@ -130,13 +142,13 @@ class OperatorTests(unittest.TestCase):
             }
         }
         with self.assertRaisesRegex(ValueError, "different deployment"):
-            operator.validate_plan(candidate, "red", "destroy", DEPLOYMENT)
+            operator.validate_plan(candidate, "red/secrets-all-the-way-down", "destroy", DEPLOYMENT)
 
     def test_roster_rejects_duplicates_unknown_fields_and_bad_ids(self) -> None:
         for value in [
-            {"team_ids": ["red", "red"]},
-            {"team_ids": ["../red"]},
-            {"team_ids": [], "images": {}},
+            {"instance_ids": ["red/secrets-all-the-way-down", "red/secrets-all-the-way-down"]},
+            {"instance_ids": ["../red"]},
+            {"instance_ids": [], "images": {}},
         ]:
             with self.subTest(value=value):
                 self.roster.write_text(json.dumps(value))
@@ -149,9 +161,11 @@ class OperatorTests(unittest.TestCase):
         def run(args: list[str], *, capture: bool = True) -> str:
             calls.append(args)
             if "show" in args:
-                return json.dumps(plan(change('aws_ecs_service.team["red"]', "create")))
+                return json.dumps(
+                    plan(change('aws_ecs_service.team["red/secrets-all-the-way-down"]', "create"))
+                )
             if "apply" in args:
-                self.assertEqual(operator.roster(self.roster), {"red"})
+                self.assertEqual(operator.roster(self.roster), {"red/secrets-all-the-way-down"})
                 if fail_apply:
                     raise subprocess.CalledProcessError(1, args)
             return ""
@@ -166,12 +180,12 @@ class OperatorTests(unittest.TestCase):
         return calls
 
     def test_create_applies_exact_reviewed_plan_and_persists_roster(self) -> None:
-        calls = self.run_create("create test-event/red")
+        calls = self.run_create("create test-event/red/secrets-all-the-way-down")
         planned = next(args for args in calls if "plan" in args)
         applied = next(args for args in calls if "apply" in args)
         self.assertEqual(applied[-1], planned[-1].removeprefix("-out="))
         self.assertNotIn("-auto-approve", applied)
-        self.assertEqual(operator.roster(self.roster), {"red"})
+        self.assertEqual(operator.roster(self.roster), {"red/secrets-all-the-way-down"})
 
     def test_cancel_preserves_roster(self) -> None:
         with self.assertRaisesRegex(ValueError, "Cancelled"):
@@ -180,15 +194,20 @@ class OperatorTests(unittest.TestCase):
 
     def test_apply_failure_retains_intended_roster(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
-            self.run_create("create test-event/red", fail_apply=True)
-        self.assertEqual(operator.roster(self.roster), {"red"})
+            self.run_create("create test-event/red/secrets-all-the-way-down", fail_apply=True)
+        self.assertEqual(operator.roster(self.roster), {"red/secrets-all-the-way-down"})
 
     def test_service_rejects_task_definition_drift(self) -> None:
         def output(root: str, name: str) -> dict[str, object]:
             return (
                 DEPLOYMENT
                 if name == "deployment"
-                else {"red": {"task_definition_arn": DEFINITION, "service_name": "red"}}
+                else {
+                    "red/secrets-all-the-way-down": {
+                        "task_definition_arn": DEFINITION,
+                        "service_name": "red/secrets-all-the-way-down",
+                    }
+                }
             )
 
         with (
@@ -208,6 +227,33 @@ class OperatorTests(unittest.TestCase):
         ):
             operator.service(self.args)
 
+    def test_status_selects_challenge_endpoints_and_supports_closed_backends(self) -> None:
+        pipeline = {"urls": {"gitea": "https://gitea-red.example.com"}}
+        state = {"urls": {"localstack": "https://tfstate-red.example.com"}}
+        for endpoints, expected in [
+            ({}, None),
+            (
+                {"red/secrets-all-the-way-down": pipeline, "red/nothing-is-ephemeral": state},
+                pipeline,
+            ),
+        ]:
+            with (
+                self.subTest(endpoints=endpoints),
+                patch.object(operator, "service", return_value=("test-event-teams", self.service)),
+                patch.object(operator, "output", return_value=endpoints),
+                contextlib.redirect_stdout(io.StringIO()) as captured,
+            ):
+                operator.team_status(self.args)
+                status = json.loads(captured.getvalue())
+                self.assertEqual(status["endpoints"], expected)
+                self.assertEqual(status["challenge"], self.args.challenge)
+        with (
+            patch.object(operator, "service", return_value=("test-event-teams", self.service)),
+            patch.object(operator, "output", return_value={"red/nothing-is-ephemeral": state}),
+            self.assertRaises(KeyError),
+        ):
+            operator.team_status(self.args)
+
     def test_reset_verifies_new_deployment(self) -> None:
         final = {
             **self.service,
@@ -221,7 +267,7 @@ class OperatorTests(unittest.TestCase):
             ),
             patch.object(operator, "aws", return_value={"service": final}) as aws,
             patch.object(operator, "run") as run,
-            patch("builtins.input", return_value="red"),
+            patch("builtins.input", return_value="red/secrets-all-the-way-down"),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             operator.reset_team(self.args)
@@ -234,7 +280,7 @@ class OperatorTests(unittest.TestCase):
             patch.object(operator, "service", return_value=("test-event-teams", self.service)),
             patch.object(operator, "aws", return_value={"service": primary}),
             patch.object(operator, "run"),
-            patch("builtins.input", return_value="red"),
+            patch("builtins.input", return_value="red/secrets-all-the-way-down"),
             self.assertRaisesRegex(ValueError, "did not complete"),
         ):
             operator.reset_team(self.args)
@@ -259,7 +305,16 @@ class OperatorTests(unittest.TestCase):
     def test_runtime_sources_use_existing_compose_contract(self) -> None:
         images = operator.runtime_images()
         self.assertEqual(
-            set(images), {"ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded"}
+            set(images),
+            {
+                "ctfd",
+                "mariadb",
+                "redis",
+                "gitea",
+                "gitea-seed",
+                "localstack-seeded",
+                "tfstate-localstack-seeded",
+            },
         )
         self.assertEqual(images["gitea"][0], "gitea/gitea:1.27.1-rootless")
         self.assertEqual(
@@ -268,11 +323,22 @@ class OperatorTests(unittest.TestCase):
         )
         self.assertEqual(
             images["localstack-seeded"][1:],
-            (operator.ROOT, operator.ROOT / "runtime/localstack/Dockerfile"),
+            (
+                operator.ROOT / "challenges/secrets-all-the-way-down/seed/localstack",
+                operator.ROOT / "challenges/secrets-all-the-way-down/seed/localstack/Dockerfile",
+            ),
         )
 
     def test_publish_scans_before_push_and_writes_digest_manifest(self) -> None:
-        names = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded"]
+        names = [
+            "ctfd",
+            "mariadb",
+            "redis",
+            "gitea",
+            "gitea-seed",
+            "localstack-seeded",
+            "tfstate-localstack-seeded",
+        ]
         repositories = {name: {"url": f"{REGISTRY}/test-event/{name}"} for name in names}
         sources: dict[str, tuple[str, Path | None, Path | None]] = {
             name: ("example:1", None, None) for name in names
@@ -303,7 +369,7 @@ class OperatorTests(unittest.TestCase):
         manifest = json.loads(Path(self.args.output).read_text())
         self.assertEqual(
             set(manifest["images"]),
-            {"ctfd", "mariadb", "redis", "gitea", "gitea_seed", "localstack"},
+            {"ctfd", "mariadb", "redis", "gitea", "gitea_seed", "localstack", "tfstate_localstack"},
         )
         self.assertTrue(all("@sha256:" in value for value in manifest["images"].values()))
 
