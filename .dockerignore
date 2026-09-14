@@ -1,6 +1,0 @@
-# Build context for runtime/localstack/Dockerfile, which needs every challenge's
-# LocalStack seed and nothing else. Allowlist, not denylist: a new file at the
-# repo root is excluded until something here says otherwise.
-*
-!runtime/localstack/
-!challenges/*/seed/localstack/

@@ -17,7 +17,7 @@ existing_endpoint_ids = {
 # Set true only to create services omitted above (S3 creation changes subnet routes).
 create_missing_endpoints = false
 
-ecr_repository_names = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded"]
+ecr_repository_names = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded", "tfstate-localstack-seeded"]
 
 tags = {
   Owner = "platform-team"

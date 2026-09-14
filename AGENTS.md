@@ -98,18 +98,18 @@ a public clone must not spoil a live event.
 
 ## Deployment shape
 
-CTFd runs on its own host. Challenge services run separately, one stack per team, so one
-player cannot break a challenge for everyone else.
+CTFd runs on its own host. Challenge services run separately, one bundle per team and challenge.
+Each bundle owns its network, dependencies, secrets, storage, and reset lifecycle.
 
 - CTFd runs in team mode with self-registration. Players create individual profiles,
   then create or join a team; solves and partial flags belong to that team.
 - **The platform host is stateful.** CTFd holds accounts, solves, and scores. Back it up;
   never treat it as disposable mid-event.
-- **Team stacks are disposable.** They must come back from nothing with a single command,
+- **Challenge bundles are disposable.** They must come back from nothing with a single command,
   because that is the recovery plan when a player breaks one.
-- **Every team stack carries the same flag values.** CTFd stores one flag per challenge, so
+- **Every instance of a challenge carries the same flag values.** CTFd stores one flag per challenge, so
   per-team flags would mean only one team could ever submit a correct answer. Generate
-  `.env` once and reuse it across stacks.
+  `.env` once and distribute only each challenge’s required fields to its instances.
 - **Team stacks get flags only.** Never copy the CTFd admin password, secret key, or
   database password onto a host where a challenge grants code execution.
 - Do not reach for the CTFd instancing plugins. They generally want the Docker socket
@@ -191,33 +191,30 @@ challenges/<name>/
   compose.yaml        # services only this challenge needs — runs on team hosts
   artifact.Dockerfile # if the challenge ships a file rather than a service
   seed/               # planted credentials and fixtures, rendered from *.tmpl
-  seed/localstack/    # *.sh run inside the shared LocalStack once it is up
+  seed/localstack/    # runtime image context containing only this challenge’s seed
   dist/               # player-facing files, listed under files:
   writeup/            # exploit.sh (healthcheck) + WRITEUP.md, never shipped
-runtime/localstack/   # the shared cloud account: one image, every challenge's seeds baked in
 compose.yaml          # the platform: CTFd, database, cache
-compose.challenges.yaml  # includes runtime/* and every challenge's compose.yaml
+scripts/challenges.py # manages separate Compose projects per team/challenge
 ```
 
-Shared services are team-stack infrastructure, not a challenge's property. A challenge
-that needs the cloud account drops a script in `seed/localstack/` and lists the flags it
-reads in `runtime/localstack/compose.yaml`; it touches nothing under another challenge.
-Seeds read flags from the environment, so the image stays flag-free and reusable. The
-image is built from the repo root against an allowlist `.dockerignore` — only
-`runtime/localstack/` and `challenges/*/seed/localstack/` can enter it. Gitea is still
-owned by Secrets All the Way Down; move it the same way when a second challenge needs it.
+Service implementations may be reused; running dependencies may not be shared between
+challenges. Each challenge's Compose file is a standalone bundle. Each runtime build
+context must mechanically exclude other challenges' seeds, flags, artifacts, and writeups.
+Secrets All the Way Down keeps Gitea and LocalStack together because they form one puzzle.
+Nothing Is Ephemeral has its own LocalStack, containing only its state-bucket seed.
 
-The two compose files deploy to different hosts — the platform once, the challenge
-services once per team — and carry separate Compose project names so tearing one down
-cannot take the other with it.
+Local lifecycle commands use an independent Compose project per team/challenge. Hosted
+AWS deployment uses one Fargate service per pair. Resetting one pair must preserve all
+other pairs and CTFd state. The AWS catalog is in deploy/aws/terraform/teams/catalog.tf.
 
 Seeding belongs **inside** the challenge stack, as a service that runs on `up`, not in a
 script an operator remembers. Replacing a broken team stack is the recovery plan, so a
 stack that needs a manual step after `up` is a stack that comes back wrong. Make the
 readiness check assert the seed actually landed: a service that reports healthy with an
-empty datastore turns a seeding bug into a puzzle with no answer in it. LocalStack's
-`seeds-ready` does this for every challenge at once — one failed seed is an unhealthy
-stack, because LocalStack's own status endpoint answers 200 either way.
+empty datastore turns a seeding bug into a puzzle with no answer in it. Each LocalStack seed writes its completion
+marker only after verifying its data; readiness checks require both the marker and the
+challenge resources. LocalStack's own status endpoint alone is insufficient.
 
 A fixture that ships to players verbatim cannot carry the "planted vulnerability" comment
 this file requires elsewhere — it would hand over the answer. Put those notes in a

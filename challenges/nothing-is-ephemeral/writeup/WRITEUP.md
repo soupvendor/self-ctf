@@ -77,7 +77,6 @@ auditor key" is a story device, not a control. A player who skips the CSV and
 uses any credentials gets the same access. That changes nothing about the
 solve: both flags still require reading state and then reading a prior version.
 
-The bucket is visible to anyone enumerating the shared LocalStack, including a
-player working on a different challenge. That is a consequence of one cloud
-account per team stack, and it is bounded: the flags only score in this
-challenge, and finding them this way *is* the challenge's skill.
+Each team gets a separate LocalStack instance for this challenge. Its bucket and
+version history are independent of the pipeline challenge's cloud environment.
+Both versions are seeded automatically when this challenge instance starts.

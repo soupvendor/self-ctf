@@ -1,11 +1,43 @@
-# Stage 2 (Gitea). Stage 1 ships as a downloadable file, and stage 3 seeds the
-# shared LocalStack from seed/localstack/ - see runtime/localstack/compose.yaml.
+# Gitea and LocalStack belong to this challenge's private network and lifecycle.
 #
 # Assume a player gets code execution in these containers: no Docker socket, no
 # host paths, and no credential that reaches CTFd or another challenge.
 
+x-self-ctf-seeders: [gitea-seed]
+
 services:
+  ingress:
+    x-self-ctf-local-only: true
+    image: self-ctf/secrets-all-the-way-down-ingress:local
+    build:
+      context: ./runtime/ingress
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=1770,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [default, ingress]
+    ports:
+      - "127.0.0.1:${GITEA_PORT:?set endpoint port in .env}:3000"
+      - "127.0.0.1:${LOCALSTACK_PORT:?set endpoint port in .env}:4566"
+    depends_on:
+      gitea:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          pids: 100
   gitea:
+    x-self-ctf-repository: gitea
     # Rootless variant: the default image starts as root and drops privileges
     # via s6, which leaves PID 1 running as root.
     image: gitea/gitea:1.27.1-rootless
@@ -19,14 +51,13 @@ services:
     volumes:
       - gitea-data:/var/lib/gitea
       - gitea-config:/etc/gitea
-    ports:
-      - "${GITEA_PORT:?set GITEA_PORT in .env}:3000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
       interval: 5s
       timeout: 5s
       retries: 40
       start_period: 10s
+    cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -39,6 +70,7 @@ services:
   # than a step someone remembers to run, because replacing a broken team stack
   # is the recovery plan.
   gitea-seed:
+    x-self-ctf-repository: gitea-seed
     image: ${GITEA_SEED_IMAGE:-self-ctf/gitea-seed:local}
     build:
       context: ./runtime/gitea-seed
@@ -63,9 +95,47 @@ services:
       LOCALSTACK_HOST_PREFIX: ${LOCALSTACK_HOST_PREFIX?set LOCALSTACK_HOST_PREFIX in .env}
       REPO_NAME: internal-deploy
     restart: "no"
+    cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          pids: 200
+
+  localstack:
+    x-self-ctf-repository: localstack-seeded
+    image: ${LOCALSTACK_IMAGE:-self-ctf/localstack-seeded:local}
+    build:
+      context: ./seed/localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: secretsmanager,ssm,s3,sts,iam
+      DEBUG: "0"
+      FLAG_CLOUD: ${FLAG_CLOUD:?set FLAG_CLOUD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/self-ctf-seeded && awslocal secretsmanager describe-secret --secret-id platform/break-glass/root-recovery >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          pids: 300
 
 volumes:
   gitea-data:
   gitea-config:
+
+networks:
+  default:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  ingress:

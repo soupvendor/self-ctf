@@ -1,131 +1,128 @@
-# Disposable team stacks
+# Disposable challenge instances
 
-One private ECS Fargate service per team, separate from the stateful CTFd host.
-Optional `team_access` adds an internal HTTPS load balancer and private DNS.
-Players use the existing company VPN; no player helper or additional VPN is
-required. **Team endpoint ownership is honor-system**, not authenticated:
-players on the shared VPN can visit another team's endpoint. Separate task
-storage and restricted task networking contain damage to a backend, but do not
-stop deliberate cross-team access through the load balancer.
+One private Fargate service per **team/challenge pair**, separate from CTFd.
+The operator roster explicitly lists pairs such as `red/secrets-all-the-way-down`
+and `red/nothing-is-ephemeral`. Either can be created, reset, or removed independently.
 
-This configuration still needs a two-team AWS rehearsal before a live event.
+## Boundaries
+
+Each pair owns an ECS service and task definition, ENI/security group, execution
+role, log group, and ephemeral volumes. There is no task IAM role, ECS Exec,
+Docker socket, host path, or shared challenge disk. Containers run as non-root
+with capabilities dropped and hard resource limits. All teams playing the same
+challenge receive the same pinned flags; different challenges use distinct
+Secrets Manager secrets and separate seeded runtime images.
+
+`catalog.tf` describes each bundle's containers, ports, volumes, and images.
+Secrets All the Way Down contains Gitea, its seeder, and its own LocalStack.
+Nothing Is Ephemeral contains a different LocalStack, seeded only with its
+Terraform state bucket. Cloud readiness requires a completed, verified seed.
+
+All containers in a task share its network boundary. Cooperation within a
+multi-service challenge is intentional. Tasks accept only ALB ingress and have
+outbound HTTPS access only to the selected AWS endpoints. IAM grants only the
+bundle's runtime images, its secret, and that instance's logs.
 
 ## Player access
 
-Supply an existing private Route53 zone associated with this VPC, an ACM
-certificate in this account/region, a domain, and the VPN source IPv4 CIDRs
-actually seen by the ALB (account for company VPN NAT). For domain
-`ctf.example.com`, team `red` gets:
+Supply an existing private Route53 zone associated with this VPC, a trusted
+ACM certificate in this account/region, a domain, and the VPN IPv4 source ranges
+actually seen by the ALB. For `ctf.example.com`, team `red` receives:
 
-- Assigned team hostname: `red.ctf.example.com` (an identifier, not a DNS record).
-- Gitea: `https://gitea-red.ctf.example.com`.
-- LocalStack: `https://aws-red.ctf.example.com`.
+| Bundle | URLs |
+|---|---|
+| Secrets All the Way Down | `https://gitea-red.ctf.example.com`, `https://aws-red.ctf.example.com` |
+| Nothing Is Ephemeral | `https://tfstate-red.ctf.example.com` |
 
-A certificate for `*.ctf.example.com` covers both endpoints. Company DNS must
-resolve the private zone for VPN clients, and their browsers, Git, and AWS CLI
-must trust the certificate chain. Both endpoints use port 443. TLS terminates
-at the ALB; forwarding inside the private VPC is HTTP on ports 3000/4566,
-restricted to the ALB security group. Unknown hostnames receive 404; direct
-player access to task ports is not permitted.
+The assigned team hostname remains `red.ctf.example.com`. Set the artifact and
+metadata transport variables as described in the [operator guide](../../operator/README.md).
 
-Omit `team_access` or set it to `null` for closed backends. With access enabled,
-the configuration caps teams at 30 to fit the default 60 ALB security-group
-egress rules. Check Fargate vCPU, subnet address, and load-balancer quotas before
-provisioning; the cap does not guarantee account capacity.
+The shared internal ALB terminates HTTPS and forwards to exact instance targets.
+Unknown hosts receive 404. The configuration rejects duplicate hostnames or more
+than 60 endpoints, matching the default ALB security-group egress-rule budget.
+With both current challenges this permits 20 teams; account quotas, subnet space,
+and Fargate capacity still need checking.
 
-## Runtime
+**Endpoint ownership remains honor-system.** VPN users who know another team's
+URL can visit it. Backend isolation does not authenticate player ownership.
+An authenticated launch/access broker is separate future work.
 
-Each team gets one Linux amd64 task (default 1 vCPU / 4 GiB):
+Set `team_access = null` for closed backends. Reuse foundation outputs for the
+VPC, private subnets, endpoint IDs and endpoint-client security group. Endpoint
+policies, ingress, DNS and ACLs must permit ECR, S3 image pulls, Secrets Manager,
+and CloudWatch Logs. Company endpoint policies and ingress are not modified here.
 
-- Gitea uses SQLite and two task-local volumes. Its health check gates seeding.
-- The nonessential Gitea seeder shares those volumes and exits after verifying
-  the planted repository. Essential LocalStack starts only after seeder success.
-- LocalStack's health check requires the planted Secrets Manager secret to exist.
+## Secrets and images
 
-Containers run as UID/GID 1000 with all capabilities dropped and hard memory
-limits. Gitea's upstream rootless image declares and owns the two mounted paths;
-[Fargate copies their contents and permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bind-mounts.html).
-No host path, Docker socket, persistent challenge disk, ECS Exec, or task IAM
-role is configured. The execution role is for ECS image pulls, secret injection,
-and that team's logs; [its credentials are not exposed to containers](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html).
+Create two separate Secrets Manager JSON payloads through the approved operator
+workflow. Terraform takes their ARNs and immutable version IDs, never payloads:
 
-Replacement loses all team data and seeds from scratch. Deployments stop the
-old task before starting its replacement, avoiding two divergent copies of a
-team. Failed deployments trip the circuit breaker without rolling back to old
-configuration. Terraform waits for steady state; inspect stopped tasks and
-seeder logs if it fails. Automatic AZ rebalancing is disabled to avoid elective
-resets. Infrastructure failures can still replace tasks.
+| Secret | Exact fields |
+|---|---|
+| `secrets-all-the-way-down` | `GITEA_ADMIN_PASSWORD`, `DEPLOY_PASSWORD`, `FLAG_PIPELINE`, `FLAG_CLOUD` |
+| `nothing-is-ephemeral` | `FLAG_STATE_CURRENT`, `FLAG_STATE_PRIOR` |
 
-## Inputs and setup
+Values must match the event's generated environment and CTFd metadata. Keep the
+pinned versions for the event. Never upload the whole `.env`. `FLAG_LAYERS`
+belongs only to the player artifact and CTFd. Optional per-challenge KMS keys
+must permit the relevant execution roles; no platform key access is granted.
 
-Use the same account, region, event name, existing VPC, and private subnets as
-the applied foundation. Use **one separate teams state per event**; never reuse
-the platform or foundation backend key.
+The operator publishes seven runtime images, including two different LocalStack
+images. `images.localstack` is the pipeline challenge, and
+`images.tfstate_localstack` is the state challenge. Local Nginx ingress images
+are not published to AWS, where the ALB supplies ingress.
 
-Before applying:
+## Deployment and lifecycle
 
-1. Use [operator image publishing](../../operator/README.md) to mirror Gitea and
-   publish the existing seeders to foundation ECR. Supply Linux amd64 digests.
-   Never push the player artifact or answer keys to runtime ECR.
-2. Create a separate Secrets Manager **JSON** secret through your approved
-   secret-management workflow, containing exactly `GITEA_ADMIN_PASSWORD`,
-   `DEPLOY_PASSWORD`, `FLAG_PIPELINE`, and `FLAG_CLOUD`. Values must match the
-   event's generated `.env`, artifact, and CTFd flags. Never upload the whole
-   `.env` or include platform credentials. `DEPLOY_USER` is the nonsecret
-   `deploy_user` input; `FLAG_LAYERS` stays in the artifact/CTFd, not the tasks.
-3. Supply the secret ARN and immutable version ID. All teams use that version,
-   including newly created and reset teams. Keep it available for the event
-   (retain a staging label if rotating other versions). Terraform never reads
-   or stores the payload. An optional customer-managed key must permit each
-   output execution-role ARN in company key policy; do not grant platform key
-   access.
-4. Confirm endpoint policies, endpoint ingress, and subnet ACLs allow ECR,
-   CloudWatch Logs, Secrets Manager, and S3 pulls. The configuration validates
-   endpoints, route coverage, and every rule on the foundation client group;
-   any inbound rule or non-endpoint outbound rule is rejected. The operator
-   needs read access to VPC endpoints and security-group rules as well as
-   provisioning permissions and permission to pass the execution roles.
-
-Endpoint security groups must be dedicated to endpoints: any other ENI carrying
-one becomes reachable on 443 too. AWS DNS is not blocked by security groups;
-DNS filtering, if required, needs a company-managed DNS firewall. These checks
-are not a substitute for a live network isolation test.
+Use separate foundation, platform and teams state keys. Initialize this root,
+copy `event.tfvars.example`, and supply the shared image manifest:
 
 ```bash
-cd deploy/aws/terraform/teams
-cp event.tfvars.example event.tfvars
-cp backend.hcl.example backend.hcl
-# Edit both copies; use a unique event backend key and standard AWS credentials.
-export AWS_PROFILE=your-company-profile
 terraform init -backend-config=backend.hcl
 terraform plan -var-file=event.tfvars -var-file=/absolute/path/images.tfvars.json -out=teams.tfplan
-# Review the plan before provisioning billable resources.
 terraform apply teams.tfplan
-terraform output
 ```
 
-Start with the example's empty `team_ids`; then use the
-[operator commands](../../operator/README.md) and their managed roster to add
-teams. `team_ids` are stable operator-assigned identifiers, not CTFd team registration
-automation. Adding an ID creates a stack; removing one destroys its service,
-task definition, role, security group, and logs. An empty set removes all teams
-but retains the cluster and optional load balancer. Changing shared images or secret version replaces
-every team's task, so avoid it mid-event unless a full reset is intended.
+Start with `instance_ids = []`, then use operator create/reset/status/destroy
+commands with both a team and challenge argument. CTFd registration does not
+provision infrastructure. Removing one pair must not remove its sibling or its
+CTFd progress. Removing all pairs retains the ECS cluster and optional ALB.
 
-The operator's `reset` command replaces one task and verifies the new ECS
-deployment completed. It does not touch CTFd scores, accounts, or other teams. Destroying this teams
-state deletes its logs and ephemeral challenge data, not company networks,
-endpoints, ECR images, source secrets, or platform state.
+Task replacement discards the pair's data and seeds from scratch. Services stop
+the old task before starting the replacement and use circuit-breaker failure
+detection without automatic rollback. Failed seeding must fail startup.
+Infrastructure failures can also replace tasks. Image or secret changes affect
+only instances of that challenge, so treat those changes as resets.
 
-## Verification and next boundary
+## Upgrading the former shared team stack
 
-`mise run terraform:check` validates all three roots and runs native mock tests,
-including two-team definitions, secret references, IAM, seeding dependencies,
-and rejection of unsafe networking. Existing CI runs the fresh-instance
-three-flag solver through `ctf challenge healthcheck` against local Compose.
-Neither proves live Fargate startup, volume ownership, endpoint permissions,
-or cross-team isolation; those remain part of the AWS rehearsal.
+This is a breaking deployment contract. Old `team_ids` become explicit
+`instance_ids`; one old secret becomes two secrets; endpoints are keyed by
+`team/challenge` and return a `urls` map. Publish the new images first: the old
+shared LocalStack image requires all flags and cannot run as an isolated bundle.
 
-The challenge artifact must be built with the HTTPS transport settings in the
-operator guide. Terraform configures the matching runtime handoff automatically
-when `team_access` is enabled. Local Compose retains its HTTP defaults.
+Do not apply this branch blindly to an existing event. The resource keys and
+service names changed; review a normal full Terraform plan for replacement of
+the disposable old team services. CTFd/foundation state must remain separate.
+The single-instance operator intentionally rejects a migration plan that touches
+old or unrelated resources. Do not use targeted or forced applies to bypass it.
+
+Old local `self-ctf-challenges` containers also remain untouched. Coordinate their
+retirement before reusing occupied host ports.
+
+## Verification
+
+`mise run terraform:check` validates and mock-tests all AWS roots, including
+two teams with both bundles, secret separation, endpoint routing, selective
+removal, and endpoint quota rejection. `mise run operator:check` checks lifecycle
+guards and rejects sibling changes.
+
+`mise run challenges:test` creates a fresh local CTFd and four challenge bundles,
+runs both ctfcli solvers for each team, tests blocked cross-bundle TCP, checks
+seed/flag separation, and resets one bundle while checking sibling data survives.
+It deletes its disposable challenge fixtures and stops its CTFd, retaining the
+temporary fixture directory, logs, and platform volumes for inspection.
+
+Local tests and mock plans do not verify real AWS permissions, routing or quotas.
+Rehearse the deployment in the sandbox before an event. Automated exploit
+healthchecks remain local under repository policy.

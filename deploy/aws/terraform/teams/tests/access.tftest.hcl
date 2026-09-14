@@ -52,7 +52,7 @@ variables {
   aws_region                        = "us-east-1"
   aws_account_id                    = "123456789012"
   event_name                        = "test-event"
-  team_ids                          = ["red", "blue"]
+  instance_ids                      = ["red/secrets-all-the-way-down", "blue/secrets-all-the-way-down"]
   vpc_id                            = "vpc-00000000000000001"
   private_subnet_ids                = ["subnet-00000000000000001", "subnet-00000000000000002"]
   endpoint_client_security_group_id = "sg-00000000000000003"
@@ -63,13 +63,16 @@ variables {
     secretsmanager = "vpce-00000000000000004"
     s3             = "vpce-00000000000000005"
   }
-  challenge_secret_arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001"
-  challenge_secret_version_id = "00000000-0000-0000-0000-000000000001"
-  deploy_user                 = "deploy-bot"
+  challenge_secrets = {
+    secrets-all-the-way-down = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001", version_id = "00000000-0000-0000-0000-000000000001", kms_key_arn = null }
+    nothing-is-ephemeral     = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/state-000002", version_id = "00000000-0000-0000-0000-000000000002" }
+  }
+  deploy_user = "deploy-bot"
   images = {
-    gitea      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    gitea_seed = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gitea              = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gitea_seed         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    localstack         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    tfstate_localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/tfstate-localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   }
 }
 
@@ -110,17 +113,17 @@ override_data {
 }
 override_resource {
   override_during = plan
-  target          = aws_cloudwatch_log_group.team["red"]
-  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/red" }
+  target          = aws_cloudwatch_log_group.team["red/secrets-all-the-way-down"]
+  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/red/secrets-all-the-way-down" }
 }
 override_resource {
   override_during = plan
-  target          = aws_cloudwatch_log_group.team["blue"]
-  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/blue" }
+  target          = aws_cloudwatch_log_group.team["blue/secrets-all-the-way-down"]
+  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/blue/secrets-all-the-way-down" }
 }
 override_resource {
   override_during = plan
-  target          = aws_security_group.team["blue"]
+  target          = aws_security_group.team["blue/secrets-all-the-way-down"]
   values          = { id = "sg-00000000000000012" }
 }
 
@@ -161,9 +164,9 @@ run "vpn_https_routing" {
       ]) &&
       alltrue([for service in aws_ecs_service.team : length(service.load_balancer) == 2]) &&
       alltrue([for key, record in aws_route53_record.team : record.name == local.endpoints[key].hostname && !record.allow_overwrite]) &&
-      output.team_endpoints.red.team_hostname == "red.ctf.example.com" &&
-      output.team_endpoints.red.gitea_url == "https://gitea-red.ctf.example.com" &&
-      output.team_endpoints.blue.aws_url == "https://aws-blue.ctf.example.com"
+      output.team_endpoints["red/secrets-all-the-way-down"].team_hostname == "red.ctf.example.com" &&
+      output.team_endpoints["red/secrets-all-the-way-down"].urls.gitea == "https://gitea-red.ctf.example.com" &&
+      output.team_endpoints["blue/secrets-all-the-way-down"].urls.localstack == "https://aws-blue.ctf.example.com"
     )
     error_message = "Each backend must accept only its ALB ports and publish distinct, non-overwriting private DNS records."
   }
@@ -172,7 +175,7 @@ run "vpn_https_routing" {
       one([for container in jsondecode(task.container_definitions) :
         one([for item in container.environment : item.value if item.name == "GITEA__server__ROOT_URL"])
         if container.name == "gitea"
-      ]) == "https://gitea-${id}.ctf.example.com/" &&
+      ]) == "https://gitea-${split("/", id)[0]}.ctf.example.com/" &&
       one([for item in local.containers.gitea-seed.environment : item.value if item.name == "LOCALSTACK_PORT"]) == "443" &&
       one([for item in local.containers.gitea-seed.environment : item.value if item.name == "LOCALSTACK_SCHEME"]) == "https" &&
       one([for item in local.containers.gitea-seed.environment : item.value if item.name == "LOCALSTACK_HOST_PREFIX"]) == "aws-"
@@ -181,9 +184,44 @@ run "vpn_https_routing" {
   }
 }
 
+run "two_challenges_have_distinct_routes" {
+  command = plan
+  variables {
+    instance_ids = [
+      "red/secrets-all-the-way-down", "blue/secrets-all-the-way-down",
+      "red/nothing-is-ephemeral", "blue/nothing-is-ephemeral"
+    ]
+  }
+  assert {
+    condition = (
+      length(aws_lb_target_group.team) == 6 && length(aws_lb_listener_rule.team) == 6 &&
+      length(distinct([for endpoint in local.endpoints : endpoint.hostname])) == 6 &&
+      output.team_endpoints["red/nothing-is-ephemeral"].urls.localstack == "https://tfstate-red.ctf.example.com" &&
+      output.team_endpoints["red/secrets-all-the-way-down"].urls.localstack == "https://aws-red.ctf.example.com" &&
+      alltrue([for id, service in aws_ecs_service.team :
+        length(service.load_balancer) == (endswith(id, "/nothing-is-ephemeral") ? 1 : 2) &&
+        alltrue([for target in service.load_balancer : contains([
+          for key, endpoint in local.endpoints : aws_lb_target_group.team[key].arn if endpoint.instance == id
+        ], target.target_group_arn)])
+      ])
+    )
+    error_message = "Endpoints and ECS target registrations must distinguish challenges within the same team."
+  }
+}
+
+run "reject_endpoint_capacity_overflow" {
+  command = plan
+  variables {
+    instance_ids = toset(flatten([for number in range(21) : [
+      "team${number}/secrets-all-the-way-down", "team${number}/nothing-is-ephemeral"
+    ]]))
+  }
+  expect_failures = [aws_lb.teams[0]]
+}
+
 run "empty_roster_with_access" {
   command = plan
-  variables { team_ids = [] }
+  variables { instance_ids = [] }
   assert {
     condition     = length(aws_lb.teams) == 1 && length(aws_lb_target_group.team) == 0 && length(aws_route53_record.team) == 0
     error_message = "Removing the last team must preserve the event entry point but remove team routes."

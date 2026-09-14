@@ -1,11 +1,14 @@
 locals {
   endpoints = var.team_access == null ? {} : merge([
-    for team in var.team_ids : {
-      for service, port in { gitea = 3000, localstack = 4566 } : "${team}/${service}" => {
-        team                       = team
-        service                    = service
-        port                       = port
-        hostname                   = "${service == "gitea" ? "gitea" : "aws"}-${team}.${var.team_access.domain}"
+    for id, instance in local.instances : {
+      for service, endpoint in local.catalog[instance.challenge].endpoints : "${id}/${service}" => {
+        instance    = id
+        team        = instance.team
+        challenge   = instance.challenge
+        service     = service
+        port        = endpoint.port
+        health_path = endpoint.health_path
+        hostname    = "${endpoint.prefix}-${instance.team}.${var.team_access.domain}"
       }
     }
   ]...)
@@ -51,7 +54,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpn" {
 resource "aws_vpc_security_group_egress_rule" "alb_to_team" {
   for_each                     = local.endpoints
   security_group_id            = aws_security_group.alb[0].id
-  referenced_security_group_id = aws_security_group.team[each.value.team].id
+  referenced_security_group_id = aws_security_group.team[each.value.instance].id
   ip_protocol                  = "tcp"
   from_port                    = each.value.port
   to_port                      = each.value.port
@@ -67,6 +70,10 @@ resource "aws_lb" "teams" {
   drop_invalid_header_fields = true
   preserve_host_header       = true
   lifecycle {
+    precondition {
+      condition     = length(local.endpoints) <= 60 && length(distinct([for endpoint in local.endpoints : endpoint.hostname])) == length(local.endpoints)
+      error_message = "Use at most 60 unique challenge endpoints for this ALB; duplicate hostnames are forbidden."
+    }
     precondition {
       condition     = length(toset([for subnet in data.aws_subnet.selected : subnet.availability_zone])) == length(var.private_subnet_ids)
       error_message = "The ALB requires one subnet per availability zone."
@@ -100,14 +107,14 @@ resource "aws_lb_target_group" "team" {
   protocol             = "HTTP"
   deregistration_delay = 10
   health_check {
-    path                = each.value.service == "gitea" ? "/api/healthz" : "/_localstack/health"
+    path                = each.value.health_path
     matcher             = "200"
     interval            = 15
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
   }
-  tags = { Team = each.value.team }
+  tags = { Team = each.value.team, Challenge = each.value.challenge }
 }
 
 resource "aws_lb_listener_rule" "team" {
@@ -120,7 +127,7 @@ resource "aws_lb_listener_rule" "team" {
   condition {
     host_header { values = [each.value.hostname] }
   }
-  tags = { Team = each.value.team }
+  tags = { Team = each.value.team, Challenge = each.value.challenge }
 }
 
 resource "aws_route53_record" "team" {

@@ -42,7 +42,7 @@ variables {
   aws_region                        = "us-east-1"
   aws_account_id                    = "123456789012"
   event_name                        = "test-event"
-  team_ids                          = ["red", "blue"]
+  instance_ids                      = ["red/secrets-all-the-way-down", "blue/secrets-all-the-way-down"]
   vpc_id                            = "vpc-00000000000000001"
   private_subnet_ids                = ["subnet-00000000000000001", "subnet-00000000000000002"]
   endpoint_client_security_group_id = "sg-00000000000000003"
@@ -53,13 +53,16 @@ variables {
     secretsmanager = "vpce-00000000000000004"
     s3             = "vpce-00000000000000005"
   }
-  challenge_secret_arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001"
-  challenge_secret_version_id = "00000000-0000-0000-0000-000000000001"
-  deploy_user                 = "deploy-bot"
+  challenge_secrets = {
+    secrets-all-the-way-down = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001", version_id = "00000000-0000-0000-0000-000000000001", kms_key_arn = null }
+    nothing-is-ephemeral     = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/state-000002", version_id = "00000000-0000-0000-0000-000000000002" }
+  }
+  deploy_user = "deploy-bot"
   images = {
-    gitea      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    gitea_seed = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gitea              = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gitea_seed         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    localstack         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    tfstate_localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/tfstate-localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   }
 }
 
@@ -100,17 +103,17 @@ override_data {
 }
 override_resource {
   override_during = plan
-  target          = aws_cloudwatch_log_group.team["red"]
-  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/red" }
+  target          = aws_cloudwatch_log_group.team["red/secrets-all-the-way-down"]
+  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/red/secrets-all-the-way-down" }
 }
 override_resource {
   override_during = plan
-  target          = aws_cloudwatch_log_group.team["blue"]
-  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/blue" }
+  target          = aws_cloudwatch_log_group.team["blue/secrets-all-the-way-down"]
+  values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/blue/secrets-all-the-way-down" }
 }
 override_resource {
   override_during = plan
-  target          = aws_security_group.team["blue"]
+  target          = aws_security_group.team["blue/secrets-all-the-way-down"]
   values          = { id = "sg-00000000000000012" }
 }
 
@@ -118,10 +121,10 @@ run "disposable_singleton_teams" {
   command = plan
   assert {
     condition = (
-      toset(keys(aws_ecs_service.team)) == var.team_ids &&
-      toset(keys(aws_ecs_task_definition.team)) == var.team_ids &&
+      toset(keys(aws_ecs_service.team)) == var.instance_ids &&
+      toset(keys(aws_ecs_task_definition.team)) == var.instance_ids &&
       alltrue([for id, service in aws_ecs_service.team :
-        service.name == id && service.desired_count == 1 && service.launch_type == "FARGATE" &&
+        service.name == replace(id, "/", "-") && service.desired_count == 1 && service.launch_type == "FARGATE" &&
         service.platform_version == "1.4.0" && !service.enable_execute_command &&
         service.wait_for_steady_state && service.deployment_minimum_healthy_percent == 0 &&
         service.deployment_maximum_percent == 100 && service.availability_zone_rebalancing == "DISABLED" &&
@@ -134,7 +137,7 @@ run "disposable_singleton_teams" {
   }
   assert {
     condition = alltrue([for id, task in aws_ecs_task_definition.team :
-      task.family == "test-event-${id}" && task.network_mode == "awsvpc" && task.task_role_arn == null &&
+      task.family == "test-event-${replace(id, "/", "-")}" && task.network_mode == "awsvpc" && task.task_role_arn == null &&
       task.cpu == "1024" && task.memory == "4096" &&
       one(task.runtime_platform).cpu_architecture == "X86_64" &&
       one(task.runtime_platform).operating_system_family == "LINUX" &&
@@ -159,6 +162,126 @@ run "disposable_singleton_teams" {
     ])
     error_message = "Every container must be non-root, capability-free, resource-limited, and Fargate-compatible."
   }
+}
+
+run "maximum_length_instance_names" {
+  command = plan
+  variables {
+    event_name = "abcdefghijklmnopqrstuvwxyzabcdef"
+    instance_ids = [
+      "abcdefghijklmnop/secrets-all-the-way-down", "abcdefghijklmnoq/secrets-all-the-way-down",
+      "abcdefghijklmnop/nothing-is-ephemeral", "abcdefghijklmnoq/nothing-is-ephemeral"
+    ]
+  }
+  assert {
+    condition = (
+      alltrue([for role in aws_iam_role.execution : length(role.name) <= 64]) &&
+      length(toset([for role in aws_iam_role.execution : role.name])) == 4
+    )
+    error_message = "Maximum-length event/team names must produce distinct IAM role names within AWS's limit."
+  }
+}
+
+run "isolated_two_challenge_bundles" {
+  command = plan
+  override_resource {
+    override_during = plan
+    target          = aws_cloudwatch_log_group.team["red/nothing-is-ephemeral"]
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/red/nothing-is-ephemeral" }
+  }
+  override_resource {
+    override_during = plan
+    target          = aws_cloudwatch_log_group.team["blue/nothing-is-ephemeral"]
+    values          = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/blue/nothing-is-ephemeral" }
+  }
+  variables {
+    instance_ids = [
+      "red/secrets-all-the-way-down", "blue/secrets-all-the-way-down",
+      "red/nothing-is-ephemeral", "blue/nothing-is-ephemeral"
+    ]
+  }
+  override_resource {
+    override_during = plan
+    target          = aws_security_group.team["red/nothing-is-ephemeral"]
+    values          = { id = "sg-00000000000000013" }
+  }
+  override_resource {
+    override_during = plan
+    target          = aws_security_group.team["blue/nothing-is-ephemeral"]
+    values          = { id = "sg-00000000000000014" }
+  }
+  assert {
+    condition = (
+      toset(keys(aws_ecs_service.team)) == var.instance_ids &&
+      length(toset([for group in aws_security_group.team : group.id])) == 4 &&
+      length(toset([for role in aws_iam_role.execution : role.name])) == 4 &&
+      length(toset([for group in aws_cloudwatch_log_group.team : group.name])) == 4 &&
+      alltrue([for id, task in aws_ecs_task_definition.team :
+        task.task_role_arn == null && task.network_mode == "awsvpc" &&
+        task.execution_role_arn == aws_iam_role.execution[id].arn &&
+        one(aws_ecs_service.team[id].network_configuration).security_groups == toset([aws_security_group.team[id].id, var.endpoint_client_security_group_id]) &&
+        length(aws_security_group.team[id].ingress) == 0 &&
+        length(aws_security_group.team[id].egress) == 0
+      ])
+    )
+    error_message = "Every team/challenge pair needs its own network boundary, identity, logs, and lifecycle."
+  }
+  assert {
+    condition = alltrue([for id, task in aws_ecs_task_definition.team :
+      endswith(id, "/nothing-is-ephemeral") ? (
+        length(task.volume) == 0 &&
+        length(jsondecode(task.container_definitions)) == 1 &&
+        one(jsondecode(task.container_definitions)).image == var.images.tfstate_localstack &&
+        toset([for secret in one(jsondecode(task.container_definitions)).secrets : secret.name]) == toset(["FLAG_STATE_CURRENT", "FLAG_STATE_PRIOR"]) &&
+        !strcontains(task.container_definitions, "FLAG_CLOUD") && !strcontains(task.container_definitions, "GITEA")
+        ) : (
+        length(task.volume) == 2 && length(jsondecode(task.container_definitions)) == 3 &&
+        !strcontains(task.container_definitions, "FLAG_STATE_")
+      )
+    ])
+    error_message = "Each task must include exactly its own dependencies, state, runtime images and flag fields."
+  }
+  assert {
+    condition = alltrue([for id, policy in aws_iam_role_policy.execution :
+      jsondecode(policy.policy).Statement[2].Resource == var.challenge_secrets[split("/", id)[1]].arn &&
+      (endswith(id, "/nothing-is-ephemeral") ? (
+        jsondecode(policy.policy).Statement[1].Resource == ["arn:aws:ecr:us-east-1:123456789012:repository/test-event/tfstate-localstack-seeded"]
+      ) : !contains(jsondecode(policy.policy).Statement[1].Resource, "arn:aws:ecr:us-east-1:123456789012:repository/test-event/tfstate-localstack-seeded"))
+    ])
+    error_message = "Execution roles may not read another challenge's secret or pull its runtime image."
+  }
+}
+
+run "remove_one_bundle" {
+  command = plan
+  variables {
+    instance_ids = ["red/secrets-all-the-way-down", "blue/secrets-all-the-way-down", "blue/nothing-is-ephemeral"]
+  }
+  assert {
+    condition = (
+      toset(keys(output.teams)) == var.instance_ids &&
+      !contains(keys(aws_ecs_service.team), "red/nothing-is-ephemeral") &&
+      alltrue([for id, entry in output.teams : entry.service_name == run.isolated_two_challenge_bundles.teams[id].service_name])
+    )
+    error_message = "Removing one instance must preserve stable service identities for every other instance."
+  }
+}
+
+run "reject_shared_challenge_secret" {
+  command = plan
+  variables {
+    challenge_secrets = {
+      secrets-all-the-way-down = {
+        arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/shared-000001"
+        version_id = "00000000-0000-0000-0000-000000000001"
+      }
+      nothing-is-ephemeral = {
+        arn        = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/shared-000001"
+        version_id = "00000000-0000-0000-0000-000000000001"
+      }
+    }
+  }
+  expect_failures = [var.challenge_secrets]
 }
 
 run "seed_gates_readiness" {
@@ -189,10 +312,10 @@ run "shared_pinned_secret_minimal_injection" {
       toset([for secret in local.containers.gitea-seed.secrets : secret.name]) == toset(["GITEA_ADMIN_PASSWORD", "CI_PASS", "FLAG_PIPELINE"]) &&
       one(local.containers.localstack.secrets).name == "FLAG_CLOUD" &&
       alltrue([for secret in concat(local.containers.gitea-seed.secrets, local.containers.localstack.secrets) :
-        startswith(secret.valueFrom, "${var.challenge_secret_arn}:") &&
-        endswith(secret.valueFrom, "::${var.challenge_secret_version_id}")
+        startswith(secret.valueFrom, "${var.challenge_secrets["secrets-all-the-way-down"].arn}:") &&
+        endswith(secret.valueFrom, "::${var.challenge_secrets["secrets-all-the-way-down"].version_id}")
       ]) &&
-      one([for secret in local.containers.gitea-seed.secrets : secret.valueFrom if secret.name == "CI_PASS"]) == "${var.challenge_secret_arn}:DEPLOY_PASSWORD::${var.challenge_secret_version_id}" &&
+      one([for secret in local.containers.gitea-seed.secrets : secret.valueFrom if secret.name == "CI_PASS"]) == "${var.challenge_secrets["secrets-all-the-way-down"].arn}:DEPLOY_PASSWORD::${var.challenge_secrets["secrets-all-the-way-down"].version_id}" &&
       alltrue([for task in aws_ecs_task_definition.team :
         !strcontains(task.container_definitions, "CTFD_") && !strcontains(task.container_definitions, "FLAG_LAYERS") &&
         !strcontains(task.container_definitions, "AWS_ACCESS_KEY_ID") &&
@@ -217,7 +340,7 @@ run "least_privilege_execution" {
         "arn:aws:ecr:us-east-1:123456789012:repository/test-event/gitea-seed",
         "arn:aws:ecr:us-east-1:123456789012:repository/test-event/localstack-seeded"
       ]) &&
-      jsondecode(policy.policy).Statement[2].Resource == var.challenge_secret_arn &&
+      jsondecode(policy.policy).Statement[2].Resource == var.challenge_secrets["secrets-all-the-way-down"].arn &&
       jsondecode(policy.policy).Statement[2].Action == ["secretsmanager:GetSecretValue"] &&
       jsondecode(policy.policy).Statement[3].Resource == "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/${id}:log-stream:team/*" &&
       toset(jsondecode(policy.policy).Statement[3].Action) == toset(["logs:CreateLogStream", "logs:PutLogEvents"])
@@ -239,10 +362,10 @@ run "closed_backend" {
   assert {
     condition = (
       length(aws_security_group.team) == 2 &&
-      aws_security_group.team["red"].id != aws_security_group.team["blue"].id &&
+      aws_security_group.team["red/secrets-all-the-way-down"].id != aws_security_group.team["blue/secrets-all-the-way-down"].id &&
       alltrue([for group in aws_security_group.team : length(group.ingress) == 0 && length(group.egress) == 0]) &&
       alltrue([for group in aws_cloudwatch_log_group.team : group.retention_in_days == 7]) &&
-      toset(keys(output.teams)) == var.team_ids &&
+      toset(keys(output.teams)) == var.instance_ids &&
       alltrue([for team in values(output.teams) : !contains(keys(team), "endpoint")])
     )
     error_message = "This backend-only stage must not expose a player endpoint or silently allow the shared VPN CIDR."
@@ -251,12 +374,15 @@ run "closed_backend" {
 
 run "custom_key" {
   command = plan
-  variables { secret_kms_key_arn = "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-0000-0000-000000000001" }
+  variables { challenge_secrets = {
+    secrets-all-the-way-down = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001", version_id = "00000000-0000-0000-0000-000000000001", kms_key_arn = "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-0000-0000-000000000001" }
+    nothing-is-ephemeral     = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/state-000002", version_id = "00000000-0000-0000-0000-000000000002" }
+  } }
   assert {
     condition = alltrue([for policy in aws_iam_role_policy.execution :
-      jsondecode(policy.policy).Statement[4].Resource == var.secret_kms_key_arn &&
+      jsondecode(policy.policy).Statement[4].Resource == var.challenge_secrets["secrets-all-the-way-down"].kms_key_arn &&
       jsondecode(policy.policy).Statement[4].Condition.StringEquals["kms:ViaService"] == "secretsmanager.us-east-1.amazonaws.com" &&
-      jsondecode(policy.policy).Statement[4].Condition.StringEquals["kms:EncryptionContext:SecretARN"] == var.challenge_secret_arn
+      jsondecode(policy.policy).Statement[4].Condition.StringEquals["kms:EncryptionContext:SecretARN"] == var.challenge_secrets["secrets-all-the-way-down"].arn
     ])
     error_message = "Decrypt must be restricted to the challenge's key and encryption context."
   }
@@ -264,7 +390,7 @@ run "custom_key" {
 
 run "empty_roster" {
   command = plan
-  variables { team_ids = [] }
+  variables { instance_ids = [] }
   assert {
     condition = (
       length(aws_ecs_service.team) == 0 && length(aws_ecs_task_definition.team) == 0 &&
@@ -297,18 +423,24 @@ run "main_route_table" {
 
 run "reject_invalid_team_id" {
   command = plan
-  variables { team_ids = ["../red"] }
-  expect_failures = [var.team_ids]
+  variables { instance_ids = ["../red"] }
+  expect_failures = [var.instance_ids]
 }
 run "reject_moving_secret_stage" {
   command = plan
-  variables { challenge_secret_version_id = "AWSCURRENT" }
-  expect_failures = [var.challenge_secret_version_id]
+  variables { challenge_secrets = {
+    secrets-all-the-way-down = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001", version_id = "AWSCURRENT", kms_key_arn = null }
+    nothing-is-ephemeral     = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/state-000002", version_id = "00000000-0000-0000-0000-000000000002" }
+  } }
+  expect_failures = [var.challenge_secrets["secrets-all-the-way-down"].version_id]
 }
 run "reject_qualified_secret_arn" {
   command = plan
-  variables { challenge_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001:FLAG_CLOUD::" }
-  expect_failures = [var.challenge_secret_arn]
+  variables { challenge_secrets = {
+    secrets-all-the-way-down = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/challenge-000001:FLAG_CLOUD::", version_id = "00000000-0000-0000-0000-000000000001", kms_key_arn = null }
+    nothing-is-ephemeral     = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ctf/state-000002", version_id = "00000000-0000-0000-0000-000000000002" }
+  } }
+  expect_failures = [var.challenge_secrets["secrets-all-the-way-down"].arn]
 }
 run "reject_small_task" {
   command = plan
@@ -436,9 +568,10 @@ run "reject_mutable_image" {
   command = plan
   variables {
     images = {
-      gitea      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea:latest"
-      gitea_seed = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      gitea              = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea:latest"
+      gitea_seed         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/gitea-seed@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      localstack         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      tfstate_localstack = "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-event/tfstate-localstack-seeded@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
   expect_failures = [var.images]
