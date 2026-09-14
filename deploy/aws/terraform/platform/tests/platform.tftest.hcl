@@ -367,3 +367,15 @@ run "reject_snapshot_without_successful_quiesce" {
   }
   expect_failures = [data.aws_ebs_snapshot.restore[0]]
 }
+
+run "nat_without_ssm_endpoints" {
+  command = plan
+  variables {
+    allow_nat_egress = true
+    ssm_endpoint_ids = {}
+  }
+  assert {
+    condition     = length(data.aws_vpc_endpoint.ssm) == 0 && length(aws_vpc_security_group_egress_rule.ssm) == 0 && aws_vpc_security_group_egress_rule.nat_https[0].cidr_ipv4 == "0.0.0.0/0" && aws_vpc_security_group_egress_rule.nat_https[0].from_port == 443 && aws_vpc_security_group_egress_rule.nat_https[0].to_port == 443 && aws_lb.platform.internal
+    error_message = "NAT must support SSM without endpoints while keeping the platform internal."
+  }
+}

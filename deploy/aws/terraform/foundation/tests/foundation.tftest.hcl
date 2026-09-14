@@ -50,6 +50,7 @@ variables {
   vpc_id                   = "vpc-00000000000000001"
   private_subnet_ids       = ["subnet-00000000000000001", "subnet-00000000000000002"]
   create_missing_endpoints = true
+  runtime_secret_arns      = ["arn:aws:secretsmanager:us-east-1:123456789012:secret:test-event/platform-000001"]
 }
 
 override_data {
@@ -95,10 +96,10 @@ run "create_foundation" {
       aws_vpc_security_group_egress_rule.created_endpoint_https[0].from_port == 443 &&
       aws_vpc_security_group_egress_rule.created_endpoint_https[0].to_port == 443 &&
       aws_vpc_security_group_egress_rule.created_endpoint_https[0].ip_protocol == "tcp" &&
-      aws_vpc_security_group_egress_rule.s3_https.prefix_list_id == aws_vpc_endpoint.s3[0].prefix_list_id &&
-      aws_vpc_security_group_egress_rule.s3_https.from_port == 443 &&
-      aws_vpc_security_group_egress_rule.s3_https.to_port == 443 &&
-      aws_vpc_security_group_egress_rule.s3_https.ip_protocol == "tcp"
+      aws_vpc_security_group_egress_rule.s3_https[0].prefix_list_id == aws_vpc_endpoint.s3[0].prefix_list_id &&
+      aws_vpc_security_group_egress_rule.s3_https[0].from_port == 443 &&
+      aws_vpc_security_group_egress_rule.s3_https[0].to_port == 443 &&
+      aws_vpc_security_group_egress_rule.s3_https[0].ip_protocol == "tcp"
     )
     error_message = "Endpoint clients must have only targeted HTTPS egress and no player ingress."
   }
@@ -258,7 +259,7 @@ run "reuse_company_endpoints" {
       length(aws_vpc_security_group_egress_rule.created_endpoint_https) == 0 &&
       length(aws_vpc_security_group_egress_rule.existing_endpoint_https) == 1 &&
       aws_vpc_security_group_egress_rule.existing_endpoint_https["sg-00000000000000099"].referenced_security_group_id == "sg-00000000000000099" &&
-      aws_vpc_security_group_egress_rule.s3_https.prefix_list_id == "pl-00000099" &&
+      aws_vpc_security_group_egress_rule.s3_https[0].prefix_list_id == "pl-00000099" &&
       output.existing_endpoint_security_group_ids == toset(["sg-00000000000000099"]) &&
       length(output.endpoint_ids) == 5
     )
@@ -509,4 +510,97 @@ run "reject_s3_interface" {
   }
 
   expect_failures = [data.aws_vpc_endpoint.existing["s3"]]
+}
+
+run "nat_without_endpoints" {
+  command = plan
+  variables {
+    allow_nat_egress         = true
+    create_missing_endpoints = false
+    existing_endpoint_ids    = {}
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.interface) == 0 && length(aws_vpc_endpoint.s3) == 0 && length(output.endpoint_ids) == 0 && length(aws_vpc_security_group_egress_rule.s3_https) == 0 && aws_vpc_security_group_egress_rule.nat_https[0].cidr_ipv4 == "0.0.0.0/0" && aws_vpc_security_group_egress_rule.nat_https[0].from_port == 443 && aws_vpc_security_group_egress_rule.nat_https[0].to_port == 443
+    error_message = "NAT mode must create no endpoints or S3 routes and allow only outbound HTTPS."
+  }
+}
+run "nat_reuses_only_s3" {
+  command = plan
+  variables {
+    allow_nat_egress         = true
+    create_missing_endpoints = false
+    existing_endpoint_ids    = { s3 = "vpce-00000000000000005" }
+  }
+  override_data {
+    target = data.aws_vpc_endpoint.existing["s3"]
+    values = {
+      vpc_id            = "vpc-00000000000000001"
+      service_name      = "com.amazonaws.us-east-1.s3"
+      state             = "available"
+      vpc_endpoint_type = "Gateway"
+      route_table_ids   = ["rtb-00000000000000001"]
+      prefix_list_id    = "pl-00000099"
+    }
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.interface) == 0 && length(aws_vpc_endpoint.s3) == 0 && keys(output.endpoint_ids) == ["s3"] && aws_vpc_security_group_egress_rule.s3_https[0].prefix_list_id == "pl-00000099"
+    error_message = "Reusing only S3 must not create endpoints or manage company routes."
+  }
+}
+run "owned_endpoint_policies" {
+  command = plan
+  assert {
+    condition     = alltrue(flatten([for endpoint in aws_vpc_endpoint.interface : [for statement in jsondecode(endpoint.policy).Statement : statement.Condition.StringEquals["aws:SourceVpc"] == var.vpc_id && statement.Condition.StringEquals["aws:PrincipalAccount"] == var.aws_account_id && !contains(statement.Action, "*")]]))
+    error_message = "Every interface allow must restrict source VPC, account and actions."
+  }
+  assert {
+    condition     = tolist(jsondecode(aws_vpc_endpoint.interface["secretsmanager"].policy).Statement[0].Resource) == sort(tolist(var.runtime_secret_arns)) && jsondecode(aws_vpc_endpoint.interface["secretsmanager"].policy).Statement[0].Action == ["secretsmanager:GetSecretValue"] && jsondecode(aws_vpc_endpoint.interface["ecr.api"].policy).Statement[0].Resource == [for name in sort(tolist(var.ecr_repository_names)) : "arn:aws:ecr:us-east-1:123456789012:repository/test-event/${name}"]
+    error_message = "Runtime endpoints must scope secrets and repositories to the deployment."
+  }
+  assert {
+    condition     = jsondecode(aws_vpc_endpoint.s3[0].policy).Statement[0].Action == ["s3:GetObject"] && jsondecode(aws_vpc_endpoint.s3[0].policy).Statement[0].Resource == "arn:aws:s3:::prod-us-east-1-starport-layer-bucket/*" && jsondecode(aws_vpc_endpoint.s3[0].policy).Statement[0].Condition.StringEquals["aws:SourceVpc"] == var.vpc_id
+    error_message = "S3 must allow only regional ECR layer reads from this VPC, including presigned downloads."
+  }
+}
+run "reject_missing_secret_allowlist" {
+  command = plan
+  variables { runtime_secret_arns = [] }
+  expect_failures = [aws_vpc_endpoint.interface["secretsmanager"]]
+}
+run "reject_foreign_secret" {
+  command = plan
+  variables { runtime_secret_arns = ["arn:aws:secretsmanager:us-east-1:999999999999:secret:other-000001"] }
+  expect_failures = [var.runtime_secret_arns]
+}
+
+run "reuse_s3_create_interfaces" {
+  command = plan
+  variables {
+    allow_nat_egress         = false
+    create_missing_endpoints = true
+    existing_endpoint_ids    = { s3 = "vpce-00000000000000005" }
+  }
+  override_data {
+    target = data.aws_vpc_endpoint.existing["s3"]
+    values = {
+      vpc_id            = "vpc-00000000000000001"
+      service_name      = "com.amazonaws.us-east-1.s3"
+      state             = "available"
+      vpc_endpoint_type = "Gateway"
+      route_table_ids   = ["rtb-00000000000000001"]
+      prefix_list_id    = "pl-00000099"
+    }
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.interface) == 4 && length(aws_vpc_endpoint.s3) == 0 && length(output.endpoint_ids) == 5 && length(aws_vpc_security_group_egress_rule.nat_https) == 0
+    error_message = "S3-only reuse with creation enabled must create only the four missing interfaces."
+  }
+}
+
+run "policy_role_and_log_scope" {
+  command = plan
+  assert {
+    condition     = alltrue(flatten([for endpoint in aws_vpc_endpoint.interface : [for statement in jsondecode(endpoint.policy).Statement : statement.Condition.ArnLike["aws:PrincipalArn"] == ["arn:aws:iam::123456789012:role/test-event-*-host", "arn:aws:iam::123456789012:role/test-event-????????????????-execution"]]])) && jsondecode(aws_vpc_endpoint.interface["logs"].policy).Statement[0].Resource == "arn:aws:logs:us-east-1:123456789012:log-group:/self-ctf/test-event/teams/*:log-stream:*" && jsondecode(aws_vpc_endpoint.interface["logs"].policy).Statement[0].Action == ["logs:CreateLogStream", "logs:PutLogEvents"]
+    error_message = "Only event runtime roles and event log writes may pass owned interface endpoints."
+  }
 }

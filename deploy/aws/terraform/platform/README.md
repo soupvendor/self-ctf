@@ -15,7 +15,9 @@ AMI boot, live AWS permissions, and an actual EBS restore still require rehearsa
 - An issued ACM certificate in this account/region and a private DNS hostname
   covered by it. Create an alias to the ALB outputs after deployment; using the
   raw ALB hostname will not match your certificate.
-- Company `ssm` and `ssmmessages` endpoints with private DNS. Their security
+- Existing NAT connectivity with `allow_nat_egress = true` and optional
+  `ssm_endpoint_ids = {}`, or company `ssm` and `ssmmessages` endpoints with
+  private DNS. When using endpoints, their security
   groups must allow TCP 443 from `host_security_group_id`. Foundation endpoint
   policies must allow platform ECR pulls and secret reads. We do not modify
   company endpoint ingress or policies.

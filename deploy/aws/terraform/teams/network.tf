@@ -104,9 +104,10 @@ data "aws_vpc_security_group_rule" "endpoint_clients" {
       condition = (
         self.is_egress && self.ip_protocol == "tcp" && self.from_port == 443 && self.to_port == 443 &&
         (contains(local.endpoint_security_group_ids, self.referenced_security_group_id) ||
-        self.prefix_list_id == data.aws_vpc_endpoint.selected["s3"].prefix_list_id)
+          contains([for service, endpoint in data.aws_vpc_endpoint.selected : endpoint.prefix_list_id if service == "s3"], self.prefix_list_id) ||
+        (var.allow_nat_egress && self.cidr_ipv4 == "0.0.0.0/0"))
       )
-      error_message = "Every endpoint-client rule must be outbound TCP 443 to a selected endpoint group or S3 prefix list; no ingress or CIDR destinations."
+      error_message = "Every client rule must be outbound TCP 443 to a selected endpoint, or 0.0.0.0/0 only when allow_nat_egress is enabled; ingress is forbidden."
     }
   }
 }

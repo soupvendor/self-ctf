@@ -59,19 +59,19 @@ data "aws_route_table" "selected" {
 
 locals {
   interface_services = toset(["ecr.api", "ecr.dkr", "logs", "secretsmanager"])
-  created_interfaces = setsubtract(local.interface_services, toset(keys(var.existing_endpoint_ids)))
+  created_interfaces = var.create_missing_endpoints ? setsubtract(local.interface_services, toset(keys(var.existing_endpoint_ids))) : toset([])
   route_table_ids    = toset([for table in data.aws_route_table.selected : table.id])
 }
 
 resource "aws_security_group" "endpoint_clients" {
   name_prefix = "${var.event_name}-endpoint-clients-"
-  description = "Outbound access to AWS endpoints only; no player ingress or team-to-team access."
+  description = "Outbound HTTPS to endpoints or explicitly enabled NAT; no ingress."
   vpc_id      = data.aws_vpc.selected.id
 
   lifecycle {
     precondition {
-      condition     = var.create_missing_endpoints || length(var.existing_endpoint_ids) == 5
-      error_message = "Supply all five existing endpoint IDs, or explicitly enable create_missing_endpoints."
+      condition     = var.allow_nat_egress || var.create_missing_endpoints || length(var.existing_endpoint_ids) == 5
+      error_message = "Supply all five existing endpoint IDs, enable create_missing_endpoints, or enable allow_nat_egress for existing NAT connectivity."
     }
 
     precondition {
@@ -108,23 +108,26 @@ resource "aws_vpc_endpoint" "interface" {
   subnet_ids          = var.private_subnet_ids
   security_group_ids  = [aws_security_group.endpoints[0].id]
 
+  policy = local.interface_endpoint_policies[each.key]
+
+  lifecycle {
+    precondition {
+      condition     = each.key != "secretsmanager" || length(var.runtime_secret_arns) > 0
+      error_message = "Creating the Secrets Manager endpoint requires runtime_secret_arns containing the exact deployment secret ARNs."
+    }
+  }
+
   tags = { Name = "${var.event_name}-${replace(each.key, ".", "-")}" }
 }
 
 resource "aws_vpc_endpoint" "s3" {
-  count             = contains(keys(var.existing_endpoint_ids), "s3") ? 0 : 1
+  count             = var.create_missing_endpoints && !contains(keys(var.existing_endpoint_ids), "s3") ? 1 : 0
   vpc_id            = data.aws_vpc.selected.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = local.route_table_ids
 
-  # Shared subnet routes must preserve existing workloads' S3 access; IAM still applies.
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow", Principal = "*", Action = "s3:*", Resource = "*"
-    }]
-  })
+  policy = local.s3_endpoint_policy
 
   tags = { Name = "${var.event_name}-s3" }
 }
@@ -177,6 +180,7 @@ resource "aws_vpc_security_group_egress_rule" "existing_endpoint_https" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "s3_https" {
+  count             = contains(keys(var.existing_endpoint_ids), "s3") || var.create_missing_endpoints ? 1 : 0
   security_group_id = aws_security_group.endpoint_clients.id
   prefix_list_id = contains(keys(var.existing_endpoint_ids), "s3") ? (
     data.aws_vpc_endpoint.existing["s3"].prefix_list_id
@@ -184,4 +188,18 @@ resource "aws_vpc_security_group_egress_rule" "s3_https" {
   ip_protocol = "tcp"
   from_port   = 443
   to_port     = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "nat_https" {
+  count             = var.allow_nat_egress ? 1 : 0
+  security_group_id = aws_security_group.endpoint_clients.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.s3_https
+  to   = aws_vpc_security_group_egress_rule.s3_https[0]
 }

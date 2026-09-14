@@ -86,3 +86,10 @@ variable "tags" {
   default     = {}
   nullable    = false
 }
+
+variable "allow_nat_egress" {
+  description = "Allow outbound HTTPS using existing private-subnet NAT connectivity. Does not create or change routes. Challenge containers also receive this outbound access."
+  type        = bool
+  default     = false
+  nullable    = false
+}
