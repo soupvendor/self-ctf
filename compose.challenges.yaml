@@ -15,4 +15,5 @@
 name: self-ctf-challenges
 
 include:
+  - runtime/localstack/compose.yaml
   - challenges/secrets-all-the-way-down/compose.yaml

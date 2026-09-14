@@ -1,5 +1,5 @@
-# Stage 2 (Gitea) and stage 3 (LocalStack). Stage 1 ships as a downloadable
-# file, so it has no service here.
+# Stage 2 (Gitea). Stage 1 ships as a downloadable file, and stage 3 seeds the
+# shared LocalStack from seed/localstack/ - see runtime/localstack/compose.yaml.
 #
 # Assume a player gets code execution in these containers: no Docker socket, no
 # host paths, and no credential that reaches CTFd or another challenge.
@@ -65,42 +65,6 @@ services:
     restart: "no"
     security_opt:
       - no-new-privileges:true
-
-  localstack:
-    # Pinned to the last release that runs without a LocalStack account: the
-    # 2026.x stream refuses to start without an auth token.
-    image: ${LOCALSTACK_IMAGE:-self-ctf/localstack-seeded:local}
-    build:
-      context: ./runtime/localstack
-    restart: unless-stopped
-    environment:
-      # Only what stage 3 needs. Lambda is deliberately absent - it is the
-      # feature that would want the Docker socket mounted.
-      SERVICES: secretsmanager,ssm,s3,sts,iam
-      DEBUG: "0"
-      FLAG_CLOUD: ${FLAG_CLOUD:?set FLAG_CLOUD in .env}
-    ports:
-      - "${LOCALSTACK_PORT:?set LOCALSTACK_PORT in .env}:4566"
-    healthcheck:
-      # Deliberately asserts the seeded secret exists rather than asking
-      # LocalStack whether it is up: /_localstack/init/ready answers 200 even
-      # when a ready.d script has failed, which would report a stack with an
-      # empty Secrets Manager as healthy.
-      test:
-        [
-          "CMD-SHELL",
-          "awslocal secretsmanager describe-secret --secret-id platform/break-glass/root-recovery >/dev/null 2>&1",
-        ]
-      interval: 10s
-      timeout: 10s
-      retries: 30
-      start_period: 20s
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          memory: 2g
 
 volumes:
   gitea-data:

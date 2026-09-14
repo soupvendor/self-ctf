@@ -278,8 +278,9 @@ def reset_team(args: argparse.Namespace) -> None:
     print(f"Reset complete: {args.team}. CTFd progress was not changed.")
 
 
-def runtime_images() -> dict[str, tuple[str, Path | None]]:
-    images: dict[str, tuple[str, Path | None]] = {}
+def runtime_images() -> dict[str, tuple[str, Path | None, Path | None]]:
+    """Mirrored images carry a pinned source; built ones carry a context and a Dockerfile."""
+    images: dict[str, tuple[str, Path | None, Path | None]] = {}
     for filename, names in [
         (ROOT / "compose.yaml", {"ctfd": "ctfd", "db": "mariadb", "cache": "redis"}),
         (ROOT / "challenges/secrets-all-the-way-down/compose.yaml", {"gitea": "gitea"}),
@@ -307,9 +308,12 @@ def runtime_images() -> dict[str, tuple[str, Path | None]]:
             source = text(mapping(services[name])["image"])
             if ":" not in source or source.endswith(":latest") or "$" in source:
                 raise ValueError("Runtime image source must be pinned")
-            images[repository] = (source, None)
-    for name, directory in [("gitea-seed", "gitea-seed"), ("localstack-seeded", "localstack")]:
-        images[name] = ("", ROOT / "challenges/secrets-all-the-way-down/runtime" / directory)
+            images[repository] = (source, None, None)
+    gitea_seed = ROOT / "challenges/secrets-all-the-way-down/runtime/gitea-seed"
+    images["gitea-seed"] = ("", gitea_seed, gitea_seed / "Dockerfile")
+    # Built from the repo root so every challenge's seed/localstack/ can enter the
+    # image; the root .dockerignore is the allowlist that keeps everything else out.
+    images["localstack-seeded"] = ("", ROOT, ROOT / "runtime/localstack/Dockerfile")
     return images
 
 
@@ -347,8 +351,8 @@ def publish_images(args: argparse.Namespace) -> None:
         docker = ["docker", "--config", directory]
         password = run(["aws", "--region", args.region, "ecr", "get-login-password"])
         run([*docker, "login", "--username", "AWS", "--password-stdin", registry], content=password)
-        for name, (source, context) in sources.items():
-            if context is None:
+        for name, (source, context, dockerfile) in sources.items():
+            if context is None or dockerfile is None:
                 run([*docker, "pull", "--platform", "linux/amd64", source], capture=False)
                 run([*docker, "tag", source, targets[name]])
             else:
@@ -358,6 +362,8 @@ def publish_images(args: argparse.Namespace) -> None:
                         "build",
                         "--platform",
                         "linux/amd64",
+                        "--file",
+                        str(dockerfile),
                         "--tag",
                         targets[name],
                         str(context),

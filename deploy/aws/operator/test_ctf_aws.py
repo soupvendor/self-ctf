@@ -266,12 +266,18 @@ class OperatorTests(unittest.TestCase):
             images["gitea-seed"][1],
             operator.ROOT / "challenges/secrets-all-the-way-down/runtime/gitea-seed",
         )
+        self.assertEqual(
+            images["localstack-seeded"][1:],
+            (operator.ROOT, operator.ROOT / "runtime/localstack/Dockerfile"),
+        )
 
     def test_publish_scans_before_push_and_writes_digest_manifest(self) -> None:
         names = ["ctfd", "mariadb", "redis", "gitea", "gitea-seed", "localstack-seeded"]
         repositories = {name: {"url": f"{REGISTRY}/test-event/{name}"} for name in names}
-        sources: dict[str, tuple[str, Path | None]] = {name: ("example:1", None) for name in names}
-        sources["gitea-seed"] = ("", self.directory)
+        sources: dict[str, tuple[str, Path | None, Path | None]] = {
+            name: ("example:1", None, None) for name in names
+        }
+        sources["gitea-seed"] = ("", self.directory, self.directory / "Dockerfile")
 
         def aws(region: str, *args: str) -> dict[str, object]:
             if args[0] == "sts":
@@ -325,7 +331,9 @@ class OperatorTests(unittest.TestCase):
                 side_effect=[DEPLOYMENT, {"ctfd": {"url": f"{REGISTRY}/test-event/ctfd"}}],
             ),
             patch.object(operator, "identity"),
-            patch.object(operator, "runtime_images", return_value={"ctfd": ("example:1", None)}),
+            patch.object(
+                operator, "runtime_images", return_value={"ctfd": ("example:1", None, None)}
+            ),
             patch.object(
                 operator,
                 "aws",
@@ -353,7 +361,9 @@ class OperatorTests(unittest.TestCase):
                 side_effect=[DEPLOYMENT, {"ctfd": {"url": f"{REGISTRY}/test-event/ctfd"}}],
             ),
             patch.object(operator, "identity"),
-            patch.object(operator, "runtime_images", return_value={"ctfd": ("example:1", None)}),
+            patch.object(
+                operator, "runtime_images", return_value={"ctfd": ("example:1", None, None)}
+            ),
             patch.object(
                 operator,
                 "aws",
