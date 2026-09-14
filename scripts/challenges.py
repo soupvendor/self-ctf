@@ -35,7 +35,6 @@ def run(args: list[str]) -> None:
 def operate(command: str, team: str, challenge: str) -> None:
     args = compose(team, challenge)
     config = json.loads(subprocess.check_output([*args, "config", "--format", "json"], text=True))
-    seeders = config.get("x-self-ctf-seeders", [])
     services = config["services"]
     if command == "images":
         built = [name for name, service in services.items() if "build" in service]
@@ -51,10 +50,7 @@ def operate(command: str, team: str, challenge: str) -> None:
     elif command in {"up", "reset"}:
         if command == "reset":
             run([*args, "down", "-v"])
-        run([*args, "up", "-d"])
-        for seeder in seeders:
-            run([*args, "wait", seeder])
-        run([*args, "up", "-d", "--wait", *[name for name in services if name not in seeders]])
+        run([*args, "up", "-d", "--wait"])
     elif command == "down":
         run([*args, "down", "-v"])
     elif command == "logs":

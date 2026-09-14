@@ -192,9 +192,33 @@ class IsolationTest(unittest.TestCase):
             self.assertIn("PASS:", output)
             print(f"PASS: {team}/{challenge} ctfcli solver", flush=True)
 
+    def check_failed_seed(self, team: str) -> None:
+        challenge = BUNDLES[0]
+        config = json.loads(
+            self.run_command(self.compose(team, challenge, "config", "--format", "json"), team)
+        )
+        config["services"]["gitea-seed"]["entrypoint"] = ["/bin/sh", "-c", "exit 17"]
+        self.bundle("down", team, challenge)
+        (self.fixture / "challenges" / challenge / "compose.yaml").write_text(json.dumps(config))
+        with self.assertRaises(self.failureException):
+            self.run_command(
+                ["python3", "scripts/challenges.py", "up", challenge, "--team", team], team
+            )
+        seeder = self.run_command(self.compose(team, challenge, "ps", "-a", "-q", "gitea-seed"))
+        self.assertEqual(
+            self.run_command(["docker", "inspect", "-f", "{{.State.ExitCode}}", seeder]), "17"
+        )
+        self.assertEqual(
+            self.run_command(
+                self.compose(team, challenge, "ps", "--status", "running", "-q", "ingress")
+            ),
+            "",
+        )
+        print("PASS: failed seeding fails startup and keeps ingress stopped", flush=True)
+
     def test_two_teams_two_challenges(self) -> None:
         self.run_command(["python3", "scripts/challenges.py", "images"])
-        self.addCleanup(self.run_command, [*self.platform, "stop"])
+        self.addCleanup(self.run_command, [*self.platform, "down"])
         self.run_command([*self.platform, "up", "-d", "--wait"])
         self.run_command(["bash", "scripts/bootstrap.sh"])
         for team in self.teams:
@@ -312,6 +336,7 @@ class IsolationTest(unittest.TestCase):
             "PASS: reset erases only one bundle; siblings retain data; platform stays running",
             flush=True,
         )
+        self.check_failed_seed(self.teams[0])
 
 
 if __name__ == "__main__":

@@ -3,8 +3,6 @@
 # Assume a player gets code execution in these containers: no Docker socket, no
 # host paths, and no credential that reaches CTFd or another challenge.
 
-x-self-ctf-seeders: [gitea-seed]
-
 services:
   ingress:
     x-self-ctf-local-only: true
@@ -24,6 +22,8 @@ services:
     depends_on:
       gitea:
         condition: service_healthy
+      gitea-seed:
+        condition: service_completed_successfully
       localstack:
         condition: service_healthy
     healthcheck:

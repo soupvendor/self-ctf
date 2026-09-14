@@ -120,8 +120,9 @@ guards and rejects sibling changes.
 `mise run challenges:test` creates a fresh local CTFd and four challenge bundles,
 runs both ctfcli solvers for each team, tests blocked cross-bundle TCP, checks
 seed/flag separation, and resets one bundle while checking sibling data survives.
-It deletes its disposable challenge fixtures and stops its CTFd, retaining the
-temporary fixture directory, logs, and platform volumes for inspection.
+It deletes its disposable challenge fixtures and removes its CTFd containers and
+networks, retaining the temporary fixture directory, logs, and platform volumes
+for inspection. A failed seeder must fail startup and keep ingress stopped.
 
 Local tests and mock plans do not verify real AWS permissions, routing or quotas.
 Rehearse the deployment in the sandbox before an event. Automated exploit
