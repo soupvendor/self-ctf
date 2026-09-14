@@ -66,7 +66,7 @@ variable "platform_subnet_id" {
 }
 
 variable "endpoint_client_security_group_id" {
-  description = "Endpoint-client security group from the foundation."
+  description = "Outbound client security group from foundation or equivalent existing provisioning."
   type        = string
   nullable    = false
 }
@@ -74,11 +74,12 @@ variable "endpoint_client_security_group_id" {
 variable "ssm_endpoint_ids" {
   description = "Existing company SSM and ssmmessages interface endpoint IDs."
   type        = map(string)
+  default     = {}
   nullable    = false
 
   validation {
-    condition     = toset(keys(var.ssm_endpoint_ids)) == toset(["ssm", "ssmmessages"]) && alltrue([for id in values(var.ssm_endpoint_ids) : can(regex("^vpce-[a-f0-9]+$", id))])
-    error_message = "Supply exactly ssm and ssmmessages endpoint IDs."
+    condition     = (var.allow_nat_egress || toset(keys(var.ssm_endpoint_ids)) == toset(["ssm", "ssmmessages"])) && alltrue([for service in keys(var.ssm_endpoint_ids) : contains(["ssm", "ssmmessages"], service)]) && alltrue([for id in values(var.ssm_endpoint_ids) : can(regex("^vpce-[a-f0-9]+$", id))])
+    error_message = "Supply valid SSM endpoint IDs; both are required unless allow_nat_egress is enabled."
   }
 }
 
@@ -250,5 +251,12 @@ variable "tags" {
   description = "Additional tags; platform identity tags are reserved."
   type        = map(string)
   default     = {}
+  nullable    = false
+}
+
+variable "allow_nat_egress" {
+  description = "Allow outbound HTTPS using existing private-subnet NAT connectivity. Does not create or change routes. Challenge containers also receive this outbound access."
+  type        = bool
+  default     = false
   nullable    = false
 }

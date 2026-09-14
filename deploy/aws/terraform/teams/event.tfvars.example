@@ -15,12 +15,9 @@ team_access = {
 vpc_id                            = "vpc-00000000000000001"
 private_subnet_ids                = ["subnet-00000000000000001", "subnet-00000000000000002"]
 endpoint_client_security_group_id = "sg-00000000000000001"
+allow_nat_egress = true
 endpoint_ids = {
-  "ecr.api"    = "vpce-00000000000000001"
-  "ecr.dkr"    = "vpce-00000000000000002"
-  logs         = "vpce-00000000000000003"
-  secretsmanager = "vpce-00000000000000004"
-  s3           = "vpce-00000000000000005"
+  s3 = "vpce-00000000000000005"
 }
 
 # Metadata only: do not paste secret values or platform credentials here.

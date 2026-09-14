@@ -7,10 +7,8 @@ vpc_id                            = "vpc-0123456789abcdef0"
 private_subnet_ids                 = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 platform_subnet_id                 = "subnet-0123456789abcdef0"
 endpoint_client_security_group_id = "sg-0123456789abcdef0"
-ssm_endpoint_ids = {
-  ssm         = "vpce-00000000000000001"
-  ssmmessages = "vpce-00000000000000002"
-}
+allow_nat_egress = true
+ssm_endpoint_ids = {}
 
 ami_id               = "ami-0123456789abcdef0"
 ami_owner_account_id = "123456789012"

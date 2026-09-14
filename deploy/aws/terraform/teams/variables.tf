@@ -73,7 +73,7 @@ variable "private_subnet_ids" {
 }
 
 variable "endpoint_client_security_group_id" {
-  description = "Foundation endpoint-client group, with no ingress and only endpoint HTTPS egress."
+  description = "Outbound client group with no ingress; endpoint HTTPS or NAT HTTPS when explicitly enabled."
   type        = string
   nullable    = false
 }
@@ -81,13 +81,15 @@ variable "endpoint_client_security_group_id" {
 variable "endpoint_ids" {
   description = "Foundation endpoint_ids output; read-only validation, never manages company endpoints."
   type        = map(string)
+  default     = {}
   nullable    = false
   validation {
     condition = (
-      toset(keys(var.endpoint_ids)) == toset(["ecr.api", "ecr.dkr", "logs", "secretsmanager", "s3"]) &&
+      (var.allow_nat_egress || toset(keys(var.endpoint_ids)) == toset(["ecr.api", "ecr.dkr", "logs", "secretsmanager", "s3"])) &&
+      alltrue([for service in keys(var.endpoint_ids) : contains(["ecr.api", "ecr.dkr", "logs", "secretsmanager", "s3"], service)]) &&
       alltrue([for id in values(var.endpoint_ids) : can(regex("^vpce-[a-f0-9]+$", id))])
     )
-    error_message = "Supply exactly ecr.api, ecr.dkr, logs, secretsmanager, and s3 endpoint IDs."
+    error_message = "Supply valid runtime endpoint IDs; all five are required unless allow_nat_egress is enabled."
   }
 }
 
@@ -160,5 +162,12 @@ variable "tags" {
   description = "Additional tags; event, component, and team identity tags are reserved."
   type        = map(string)
   default     = {}
+  nullable    = false
+}
+
+variable "allow_nat_egress" {
+  description = "Allow outbound HTTPS using existing private-subnet NAT connectivity. Does not create or change routes. Challenge containers also receive this outbound access."
+  type        = bool
+  default     = false
   nullable    = false
 }

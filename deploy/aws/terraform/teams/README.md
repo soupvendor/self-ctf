@@ -20,7 +20,8 @@ Terraform state bucket. Cloud readiness requires a completed, verified seed.
 
 All containers in a task share its network boundary. Cooperation within a
 multi-service challenge is intentional. Tasks accept only ALB ingress and have
-outbound HTTPS access only to the selected AWS endpoints. IAM grants only the
+outbound HTTPS access to the selected AWS endpoints, or existing NAT when
+`allow_nat_egress = true`. NAT also gives challenge containers outbound HTTPS. IAM grants only the
 bundle's runtime images, its secret, and that instance's logs.
 
 ## Player access
@@ -50,7 +51,9 @@ An authenticated launch/access broker is separate future work.
 Set `team_access = null` for closed backends. Reuse foundation outputs for the
 VPC, private subnets, endpoint IDs and endpoint-client security group. Endpoint
 policies, ingress, DNS and ACLs must permit ECR, S3 image pulls, Secrets Manager,
-and CloudWatch Logs. Company endpoint policies and ingress are not modified here.
+and CloudWatch Logs. With `allow_nat_egress = true`, endpoint IDs may be partial
+or empty; existing NAT handles services without endpoints. Set the same option
+in foundation. Company endpoint policies and ingress are not modified here.
 
 ## Secrets and images
 

@@ -587,3 +587,69 @@ run "reject_missing_private_dns" {
   }
   expect_failures = [data.aws_vpc_endpoint.selected["ecr.api"]]
 }
+
+run "nat_without_endpoints" {
+  command = plan
+  variables {
+    allow_nat_egress = true
+    endpoint_ids     = {}
+  }
+  override_data {
+    target = data.aws_vpc_security_group_rule.endpoint_clients["sgr-00000000000000001"]
+    values = {
+      is_egress                    = true
+      ip_protocol                  = "tcp"
+      from_port                    = 443
+      to_port                      = 443
+      cidr_ipv4                    = "0.0.0.0/0"
+      referenced_security_group_id = ""
+      prefix_list_id               = ""
+    }
+  }
+  assert {
+    condition     = alltrue([for service in aws_ecs_service.team : alltrue([for network in service.network_configuration : !network.assign_public_ip])]) && alltrue([for group in aws_security_group.team : length(group.ingress) == 0 && length(group.egress) == 0])
+    error_message = "NAT must not add public IPs, inbound rules or unrestricted team security-group rules."
+  }
+}
+
+run "nat_only_s3" {
+  command = plan
+  variables {
+    allow_nat_egress = true
+    endpoint_ids     = { s3 = "vpce-00000000000000005" }
+  }
+  override_data {
+    target = data.aws_vpc_security_group_rule.endpoint_clients["sgr-00000000000000001"]
+    values = {
+      is_egress                    = true
+      ip_protocol                  = "tcp"
+      from_port                    = 443
+      to_port                      = 443
+      cidr_ipv4                    = "0.0.0.0/0"
+      referenced_security_group_id = ""
+      prefix_list_id               = ""
+    }
+  }
+  assert {
+    condition     = alltrue([for service in aws_ecs_service.team : alltrue([for network in service.network_configuration : !network.assign_public_ip])]) && alltrue([for group in aws_security_group.team : length(group.ingress) == 0 && length(group.egress) == 0])
+    error_message = "NAT must not add public IPs, inbound rules or unrestricted team security-group rules."
+  }
+}
+
+run "nat_still_rejects_ingress" {
+  command = plan
+  variables {
+    allow_nat_egress = true
+    endpoint_ids     = {}
+  }
+  override_data {
+    target = data.aws_vpc_security_group_rule.endpoint_clients["sgr-00000000000000001"]
+    values = { is_egress = false, ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0", referenced_security_group_id = "", prefix_list_id = "" }
+  }
+  expect_failures = [data.aws_vpc_security_group_rule.endpoint_clients]
+}
+run "reject_missing_endpoints_without_nat" {
+  command = plan
+  variables { endpoint_ids = {} }
+  expect_failures = [var.endpoint_ids]
+}

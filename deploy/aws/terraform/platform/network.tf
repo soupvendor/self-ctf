@@ -172,3 +172,12 @@ resource "aws_lb_target_group_attachment" "platform" {
   target_id        = aws_instance.platform.id
   port             = 8000
 }
+
+resource "aws_vpc_security_group_egress_rule" "nat_https" {
+  count             = var.allow_nat_egress ? 1 : 0
+  security_group_id = aws_security_group.host.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}

@@ -5,13 +5,10 @@ event_name     = "devops-ctf"
 vpc_id             = "vpc-0123456789abcdef0"
 private_subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 
-# Replace all five IDs with company-managed endpoints in this VPC.
+# Reuse the company S3 endpoint; other AWS APIs use existing NAT connectivity.
+allow_nat_egress = true
 existing_endpoint_ids = {
-  "ecr.api"      = "vpce-00000000000000001"
-  "ecr.dkr"      = "vpce-00000000000000002"
-  logs           = "vpce-00000000000000003"
-  secretsmanager = "vpce-00000000000000004"
-  s3             = "vpce-00000000000000005"
+  s3 = "vpce-00000000000000005"
 }
 
 # Set true only to create services omitted above (S3 creation changes subnet routes).

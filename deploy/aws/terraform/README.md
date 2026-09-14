@@ -63,34 +63,63 @@ targets standard commercial AWS regions.
 
 ## Endpoint ownership
 
-Set `existing_endpoint_ids` for company-managed `ecr.api`, `ecr.dkr`, `logs`,
-`secretsmanager`, and `s3` endpoints. Terraform reads but does not manage or
-destroy them. The default is reuse-only: all five IDs are required unless you
-set `create_missing_endpoints = true`. With that opt-in, only omitted services
-are created. Never omit an existing private-DNS endpoint for the same service.
+For private subnets with existing NAT connectivity, the examples use:
 
-Reused endpoints must be available in the selected VPC and region. Interface
-endpoints need private DNS; the S3 gateway endpoint must cover every selected
-subnet's route table. Your network owner must also ensure:
+```hcl
+allow_nat_egress        = true
+create_missing_endpoints = false
+existing_endpoint_ids  = { s3 = "vpce-REPLACE" }
+```
 
-- The reused interface endpoint security groups allow inbound TCP 443 from the
-  output `endpoint_client_security_group_id` (or an existing permitted source).
-  This configuration does not edit company security groups.
-- Endpoint policies permit the eventual ECR pulls, log writes, and secret reads.
-  Network ACLs and DNS forwarding must permit the corresponding traffic.
+Set `allow_nat_egress = true` in foundation, platform, and teams. Foundation's
+`endpoint_ids` output can contain only S3, any valid subset, or be empty. Pass
+that map to teams; platform's `ssm_endpoint_ids` can be `{}`. This creates no
+endpoints and changes no routes. Workloads retain private addresses and internal
+load balancers. Existing NAT routes, DNS, network ACLs and return traffic must
+work; Terraform validates private subnet selection but does not prove connectivity.
+NAT mode permits outbound TCP 443 to `0.0.0.0/0`, including from compromised
+challenge containers. It does not add inbound access. Use company egress controls
+if destination filtering is required.
 
-The client security group grants only TCP 443 egress to endpoint security groups
-and the regional S3 prefix list, with no inbound rules. Future workloads will
-attach it alongside their own restricted ingress groups. Security groups are
-additive: an additional allow-all egress group would defeat this restriction.
-This foundation alone is not proof of team isolation; that is tested when
-compute and player access are added.
+With `allow_nat_egress = false` (the default), all five runtime endpoints are
+required. Supply existing IDs, or set `create_missing_endpoints = true` to create
+only missing services. For example, supplying only S3 with creation enabled creates
+four interface endpoints and leaves S3 and its routes untouched. Platform also
+requires existing `ssm` and `ssmmessages` endpoints in this mode.
 
-Creating an S3 gateway endpoint **changes shared subnet route tables**. Its
-policy preserves general S3 access so it does not break unrelated workloads;
-IAM and bucket policies still apply. Prefer reusing the company's endpoint.
-New interface endpoints also incur per-AZ hourly and data-processing charges.
-See [AWS's ECR endpoint requirements](https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html).
+Reused endpoints are read-only: Terraform never changes their policies, security
+groups or route associations. They must match the VPC/service, have private DNS
+for interface endpoints, and cover selected route tables for S3. Company interface
+endpoint groups must permit HTTPS from `endpoint_client_security_group_id`;
+SSM groups must permit HTTPS from the platform `host_security_group_id`.
+Existing endpoint policies must authorize the deployment's runtime operations.
+
+Created interface endpoints accept HTTPS only from the CTF client security group.
+Their policies require the selected source VPC, account and event runtime role
+names. ECR allows authentication and pulls from event repositories; Logs allows
+stream creation and writes under the event team log groups; Secrets Manager allows
+only `GetSecretValue` for exact `runtime_secret_arns` supplied to foundation.
+List both platform and challenge secret ARNs there before creating that endpoint;
+never include secret values. IAM roles further restrict each workload's resources.
+These endpoint policies do not restrict requests that bypass the endpoint via NAT.
+Image publishing must use a path outside these pull-only endpoints.
+
+A created S3 gateway endpoint permits only regional ECR layer downloads from the
+selected VPC. AWS-signed layer URLs require permitting the signing principal;
+the policy therefore scopes the bucket and source VPC instead of the task role.
+Creating it changes selected route tables and can block other S3 uses, including
+SSM agent artifact downloads. Reuse the company S3 endpoint for shared subnets.
+New interface endpoints incur AWS charges.
+
+Foundation remains a small provisioning convenience for ECR and the outbound
+client group. Platform and teams consume ordinary IDs and image digests rather
+than Terraform remote state: an externally provisioned equivalent can replace
+foundation. The supplied client group must belong to the VPC and have no ingress;
+teams validates every rule against the selected connectivity mode. The bundled operator
+commands currently use foundation outputs for identity checks and image publishing,
+so skipping foundation requires your own deployment/publishing pipeline. For the
+rehearsal, retain foundation with NAT enabled and endpoint creation disabled.
+
 
 ## Images and lifecycle
 
