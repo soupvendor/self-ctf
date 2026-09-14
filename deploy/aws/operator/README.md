@@ -48,6 +48,7 @@ For AWS HTTPS access, set these nonsecret values in the event's `.env` **before*
 `mise run build`:
 
 ```dotenv
+CHALLENGE_HOST={team}
 GITEA_SCHEME=https
 GITEA_HOST_PREFIX=gitea-
 GITEA_PORT=443
@@ -58,6 +59,11 @@ TFSTATE_LOCALSTACK_SCHEME=https
 TFSTATE_LOCALSTACK_HOST_PREFIX=tfstate-
 TFSTATE_LOCALSTACK_PORT=443
 ```
+
+`CHALLENGE_HOST={team}` keeps the shared CTFd metadata independent of one team's
+hostname. For a local preview, use `CHALLENGE_HOST=localhost`; rendering and syncing
+then display usable local addresses. CTFd does not replace `{team}` per logged-in
+team.
 
 The artifact contains `{team}` hostname placeholders, not a specific team's
 address. Teams receive their assigned hostname from `team_endpoints` and recover
