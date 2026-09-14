@@ -1,0 +1,66 @@
+name: Nothing Is Ephemeral
+author: self-ctf
+category: IaC
+description: |
+  Ticket SEC-4471, closed as **remediated**:
+
+  > API signing key found in plaintext in Terraform state. Migrated
+  > `aws_secretsmanager_secret_version` to the write-only `secret_string_wo`
+  > argument and re-applied. Confirmed the value no longer appears in state.
+
+  The data-platform team is confident. Audit asked you to check their work
+  before signing off. The access key they issued you is attached; it reads
+  their state bucket and nothing else. In the endpoint below, `{team}` is your
+  assigned team hostname.
+
+  Two flags, 200 points together: the secret they say is gone, and the one
+  they never noticed. Submit each as you find it.
+
+attribution: self-ctf
+value: 200
+type: standard
+
+image: null
+protocol: null
+host: null
+
+connection_info: "${LOCALSTACK_SCHEME}://${LOCALSTACK_HOST_PREFIX}{team}:${LOCALSTACK_PORT}"
+healthcheck: writeup/exploit.sh
+solution:
+  path: writeup/WRITEUP.md
+  state: hidden
+
+attempts: 20
+
+# Two flags, order-independent. Both are read from the same bucket, so there is
+# no handoff to enforce; the second just takes one more idea than the first.
+logic: all
+
+flags:
+  - ${FLAG_STATE_CURRENT}
+  - ${FLAG_STATE_PRIOR}
+
+topics:
+  - terraform state
+  - secrets management
+  - s3 versioning
+
+tags:
+  - terraform
+  - iac
+  - cloud
+
+files:
+  - dist/auditor_accessKeys.csv
+
+hints:
+  - content: "`sensitive = true` changes what Terraform prints, not what it writes."
+    cost: 0
+  - content: Fixing a file in a versioned bucket writes a new version. Nothing happened to the old one.
+    cost: 50
+
+requirements: []
+next: null
+
+state: visible
+version: "0.1"

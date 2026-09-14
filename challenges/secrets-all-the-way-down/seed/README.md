@@ -17,7 +17,7 @@ secrets, and do not remove the `echo`.
 The `NOTE(ops)` comment is in-fiction and doubles as the nudge for players. The
 AWS credentials are the only route into stage 3.
 
-## `runtime/localstack/seed.sh` — stage 3
+## `seed/localstack/seed.sh` — stage 3
 
 **The flaw, deliberately:** a break-glass secret readable by an ordinary deploy
 identity, with an SSM parameter pointing at it. Do not scope the credentials.

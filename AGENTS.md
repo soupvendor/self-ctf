@@ -91,6 +91,10 @@ a public clone must not spoil a live event.
 - Challenge services must survive being shared or replaced. Assume several people hit the
   same instance and that it gets rebuilt mid-event: no manual seeding, no state that only
   exists because someone clicked something.
+- Every challenge stands alone: its own entry point, its own credentials, its own flags.
+  Never require material recovered from another challenge, and never edit another
+  challenge's files to add yours. Chain with `requirements` only when progression *is*
+  the design, and say so in the description.
 
 ## Deployment shape
 
@@ -184,14 +188,24 @@ Host tooling is managed with `mise`: `mise install`.
 ```
 challenges/<name>/
   challenge.yml       # ctfcli metadata
-  compose.yaml        # challenge services, if any — runs on team hosts
+  compose.yaml        # services only this challenge needs — runs on team hosts
   artifact.Dockerfile # if the challenge ships a file rather than a service
   seed/               # planted credentials and fixtures, rendered from *.tmpl
+  seed/localstack/    # *.sh run inside the shared LocalStack once it is up
   dist/               # player-facing files, listed under files:
   writeup/            # exploit.sh (healthcheck) + WRITEUP.md, never shipped
+runtime/localstack/   # the shared cloud account: one image, every challenge's seeds baked in
 compose.yaml          # the platform: CTFd, database, cache
-compose.challenges.yaml  # includes every challenge's compose.yaml
+compose.challenges.yaml  # includes runtime/* and every challenge's compose.yaml
 ```
+
+Shared services are team-stack infrastructure, not a challenge's property. A challenge
+that needs the cloud account drops a script in `seed/localstack/` and lists the flags it
+reads in `runtime/localstack/compose.yaml`; it touches nothing under another challenge.
+Seeds read flags from the environment, so the image stays flag-free and reusable. The
+image is built from the repo root against an allowlist `.dockerignore` — only
+`runtime/localstack/` and `challenges/*/seed/localstack/` can enter it. Gitea is still
+owned by Secrets All the Way Down; move it the same way when a second challenge needs it.
 
 The two compose files deploy to different hosts — the platform once, the challenge
 services once per team — and carry separate Compose project names so tearing one down
@@ -201,7 +215,9 @@ Seeding belongs **inside** the challenge stack, as a service that runs on `up`, 
 script an operator remembers. Replacing a broken team stack is the recovery plan, so a
 stack that needs a manual step after `up` is a stack that comes back wrong. Make the
 readiness check assert the seed actually landed: a service that reports healthy with an
-empty datastore turns a seeding bug into a puzzle with no answer in it.
+empty datastore turns a seeding bug into a puzzle with no answer in it. LocalStack's
+`seeds-ready` does this for every challenge at once — one failed seed is an unhealthy
+stack, because LocalStack's own status endpoint answers 200 either way.
 
 A fixture that ships to players verbatim cannot carry the "planted vulnerability" comment
 this file requires elsewhere — it would hand over the answer. Put those notes in a

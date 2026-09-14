@@ -5,8 +5,10 @@ training. [CTFd](https://ctfd.io/) provides accounts, teams, scoring, and flag
 submission; intentionally vulnerable challenge services run separately so they
 can be isolated and replaced per team.
 
-The current challenge, **Secrets All the Way Down**, follows a leaked credential
-through Docker image layers, a Gitea pipeline, and LocalStack Secrets Manager.
+Challenges so far: **Secrets All the Way Down** follows a leaked credential
+through Docker image layers, a Gitea pipeline, and LocalStack Secrets Manager;
+**Nothing Is Ephemeral** audits a Terraform state bucket whose owners believe
+they scrubbed it.
 
 > This repository is under active development. The local Docker Compose path is
 > functional and tested. The AWS configuration is ready for an initial rehearsal,
