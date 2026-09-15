@@ -345,6 +345,19 @@ def runtime_images() -> dict[str, tuple[str, Path | None, Path | None]]:
     return images
 
 
+def prepare_docker_config(destination: Path) -> None:
+    source = Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))).resolve()
+    settings = source / "config.json"
+    config = mapping(json.loads(settings.read_text())) if settings.exists() else {}
+    directories = config.get("cliPluginsExtraDirs", [])
+    if not isinstance(directories, list) or not all(
+        isinstance(directory, str) and directory for directory in directories
+    ):
+        raise ValueError("Docker cliPluginsExtraDirs must be a list of nonempty paths")
+    plugins = [*directories, str(source / "cli-plugins")]
+    (destination / "config.json").write_text(json.dumps({"cliPluginsExtraDirs": plugins}))
+
+
 def publish_images(args: argparse.Namespace) -> None:
     deployment = output("foundation", "deployment")
     identity(args.account, args.region, deployment, args.event)
@@ -376,6 +389,7 @@ def publish_images(args: argparse.Namespace) -> None:
     ):
         raise ValueError("Publishing requires immutable ECR repositories")
     with tempfile.TemporaryDirectory(prefix="self-ctf-ecr-login-") as directory:
+        prepare_docker_config(Path(directory))
         docker = ["docker", "--config", directory]
         password = run(["aws", "--region", args.region, "ecr", "get-login-password"])
         run([*docker, "login", "--username", "AWS", "--password-stdin", registry], content=password)

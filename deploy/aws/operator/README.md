@@ -28,6 +28,10 @@ closed backends also replaces their tasks. Review that migration separately.
 
 Run on a workstation with access to upstream registries and ECR. The `.env`
 loaded by mise supplies the configured secrets to the image leak scan.
+Docker must have BuildKit and the Buildx CLI plugin available. The temporary ECR
+login configuration preserves `cliPluginsExtraDirs` and the original config's
+`cli-plugins` directory, including Homebrew installations. Existing registry
+credentials and credential-store settings are not copied or modified.
 
 ```bash
 export AWS_PROFILE=your-company-profile

@@ -2,6 +2,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -35,6 +36,11 @@ class OperatorTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix="self-ctf-operator-test-")
         self.addCleanup(directory.cleanup)
         self.directory = Path(directory.name)
+        self.docker_config = self.directory / "docker-config"
+        self.docker_config.mkdir()
+        environment = patch.dict(os.environ, {"DOCKER_CONFIG": str(self.docker_config)})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.roster = self.directory / "roster.tfvars.json"
         self.roster.write_text('{"instance_ids": []}')
         self.variables = self.directory / "event.tfvars"
@@ -329,6 +335,42 @@ class OperatorTests(unittest.TestCase):
             ),
         )
 
+    def test_docker_plugin_config_preserves_paths_without_credentials(self) -> None:
+        original = {
+            "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"],
+            "auths": {REGISTRY: {"auth": "fixture-token"}},
+            "credsStore": "desktop",
+        }
+        settings = self.docker_config / "config.json"
+        settings.write_text(json.dumps(original))
+        operator.prepare_docker_config(self.directory)
+        self.assertEqual(
+            json.loads((self.directory / "config.json").read_text()),
+            {
+                "cliPluginsExtraDirs": [
+                    "/opt/homebrew/lib/docker/cli-plugins",
+                    str(self.docker_config / "cli-plugins"),
+                ]
+            },
+        )
+        self.assertEqual(json.loads(settings.read_text()), original)
+
+    def test_docker_plugin_config_without_settings(self) -> None:
+        operator.prepare_docker_config(self.directory)
+        self.assertEqual(
+            json.loads((self.directory / "config.json").read_text()),
+            {"cliPluginsExtraDirs": [str(self.docker_config / "cli-plugins")]},
+        )
+
+    def test_docker_plugin_config_rejects_invalid_paths(self) -> None:
+        for directories in ["/opt/homebrew/lib/docker/cli-plugins", [None], [""]]:
+            with self.subTest(directories=directories):
+                (self.docker_config / "config.json").write_text(
+                    json.dumps({"cliPluginsExtraDirs": directories})
+                )
+                with self.assertRaisesRegex(ValueError, "cliPluginsExtraDirs"):
+                    operator.prepare_docker_config(self.directory)
+
     def test_publish_scans_before_push_and_writes_digest_manifest(self) -> None:
         names = [
             "ctfd",
@@ -344,6 +386,21 @@ class OperatorTests(unittest.TestCase):
             name: ("example:1", None, None) for name in names
         }
         sources["gitea-seed"] = ("", self.directory, self.directory / "Dockerfile")
+        (self.docker_config / "config.json").write_text(
+            json.dumps({"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]})
+        )
+
+        def command(args: list[str], **kwargs: object) -> str:
+            if args[0] == "docker":
+                settings = json.loads((Path(args[2]) / "config.json").read_text())
+                self.assertEqual(
+                    settings["cliPluginsExtraDirs"],
+                    [
+                        "/opt/homebrew/lib/docker/cli-plugins",
+                        str(self.docker_config / "cli-plugins"),
+                    ],
+                )
+            return "temporary-registry-token"
 
         def aws(region: str, *args: str) -> dict[str, object]:
             if args[0] == "sts":
@@ -356,7 +413,7 @@ class OperatorTests(unittest.TestCase):
             patch.object(operator, "output", side_effect=[DEPLOYMENT, repositories]),
             patch.object(operator, "runtime_images", return_value=sources),
             patch.object(operator, "aws", side_effect=aws),
-            patch.object(operator, "run", return_value="temporary-registry-token") as run,
+            patch.object(operator, "run", side_effect=command) as run,
             contextlib.redirect_stdout(io.StringIO()),
         ):
             operator.publish_images(self.args)
